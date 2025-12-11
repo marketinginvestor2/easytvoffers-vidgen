@@ -42,8 +42,9 @@ export const generateTvCommercial = async (
 
       Task:
       1. Create a "visualHeadline": Rewrite the Core Offer into a short, punchy, high-impact headline (3-6 words) suitable for large text on a TV screen. It must be compelling and urgent.
-      2. Create a "script": Write a 45-second high-energy, persuasive TV commercial voiceover script.
-         - Tone: Authoritative, energetic, commanding.
+      2. Create a "script": Write a 45-second persuasive TV commercial voiceover script.
+         - Tone: Deep, authoritative, trustworthy, and confident. A premium American male narrator voice.
+         - Style: Strong, resonant statements. Energetic but grounded and professional. Not "shouty".
          - Constraints: Spoken words ONLY. No scene descriptions.
          - Ending: MUST end with "Scan the QR code on your screen right now."
          - Length: Approximately 100-110 words.
@@ -104,7 +105,8 @@ export const generateTvCommercial = async (
         responseModalities: [Modality.AUDIO],
         speechConfig: {
           voiceConfig: {
-            prebuiltVoiceConfig: { voiceName: 'Fenrir' }, // Fenrir is deep and authoritative
+            // Charon is the deepest, most resonant male voice, good for authority/trust.
+            prebuiltVoiceConfig: { voiceName: 'Charon' }, 
           },
         },
       },

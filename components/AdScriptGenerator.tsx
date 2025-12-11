@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { generateTvCommercial } from '../services/geminiService';
-import { Wand2, Loader2, Play, Square, Volume2, Radio, Music } from 'lucide-react';
+import { Wand2, Loader2, Play, Square, Volume2, Radio, Music, ArrowRight } from 'lucide-react';
 
 // Reliable source for royalty-free upbeat background music
 const BACKGROUND_MUSIC_URL = 'https://cdn.pixabay.com/audio/2024/01/16/audio_e2b992254f.mp3'; // Energetic Upbeat Corporate
@@ -312,113 +312,129 @@ const AdScriptGenerator: React.FC = () => {
                 </div>
              ) : (
                 // Active Simulator State
-                <div className="relative w-full shadow-2xl animate-fade-in-up">
-                    {/* TV Bezel */}
-                    <div className="relative bg-gray-900 rounded-[2rem] p-4 shadow-[0_0_50px_rgba(0,0,0,0.8)] border border-gray-800 ring-1 ring-white/10">
-                        
-                        {/* Screen Content */}
-                        <div className="relative aspect-video bg-black rounded-xl overflow-hidden flex flex-col items-center justify-center border border-white/5 group">
+                <div className="w-full flex flex-col items-center gap-8 animate-fade-in-up">
+                    <div className="relative w-full shadow-2xl">
+                        {/* TV Bezel */}
+                        <div className="relative bg-gray-900 rounded-[2rem] p-4 shadow-[0_0_50px_rgba(0,0,0,0.8)] border border-gray-800 ring-1 ring-white/10">
                             
-                            {/* Generated Background Image with Motion (Ken Burns) */}
-                            {imageData ? (
-                                <div className="absolute inset-0 overflow-hidden">
-                                    <img 
-                                        src={`data:image/jpeg;base64,${imageData}`} 
-                                        alt="Commercial Background"
-                                        className="w-full h-full object-cover opacity-60 filter blur-sm animate-ken-burns"
-                                    />
-                                </div>
-                            ) : (
-                                <div className="absolute inset-0 bg-gradient-to-br from-gray-800 to-gray-900 opacity-80" />
-                            )}
-                            
-                            {/* Dark Overlay for readability */}
-                            <div className="absolute inset-0 bg-black/30"></div>
-
-                            {/* Main Content Layout */}
-                            <div className="relative z-10 flex flex-row items-center justify-between w-full px-8 md:px-12 h-full gap-8">
+                            {/* Screen Content */}
+                            <div className="relative aspect-video bg-black rounded-xl overflow-hidden flex flex-col items-center justify-center border border-white/5 group">
                                 
-                                {/* Left Side: Text Offer */}
-                                <div className="flex-1 text-left space-y-4">
-                                    <div className="inline-block bg-brand-primary text-brand-dark font-black px-3 py-1 text-xs uppercase tracking-widest rounded mb-2 shadow-lg">
-                                        Limited Time Offer
+                                {/* Generated Background Image with Motion (Ken Burns) */}
+                                {imageData ? (
+                                    <div className="absolute inset-0 overflow-hidden">
+                                        <img 
+                                            src={`data:image/jpeg;base64,${imageData}`} 
+                                            alt="Commercial Background"
+                                            className="w-full h-full object-cover opacity-60 filter blur-sm animate-ken-burns"
+                                        />
                                     </div>
-                                    <h1 className="text-3xl md:text-4xl lg:text-5xl font-black text-white leading-tight drop-shadow-[0_2px_10px_rgba(0,0,0,0.8)]">
-                                        {visualHeadline || offer}
-                                    </h1>
-                                    <p className="text-xl text-white font-bold tracking-wide drop-shadow-md">
-                                        at {businessName}
-                                    </p>
+                                ) : (
+                                    <div className="absolute inset-0 bg-gradient-to-br from-gray-800 to-gray-900 opacity-80" />
+                                )}
+                                
+                                {/* Dark Overlay for readability */}
+                                <div className="absolute inset-0 bg-black/30"></div>
+
+                                {/* Main Content Layout */}
+                                <div className="relative z-10 flex flex-row items-center justify-between w-full px-8 md:px-12 h-full gap-8">
+                                    
+                                    {/* Left Side: Text Offer */}
+                                    <div className="flex-1 text-left space-y-4">
+                                        <div className="inline-block bg-brand-primary text-brand-dark font-black px-3 py-1 text-xs uppercase tracking-widest rounded mb-2 shadow-lg">
+                                            Limited Time Offer
+                                        </div>
+                                        <h1 className="text-3xl md:text-4xl lg:text-5xl font-black text-white leading-tight drop-shadow-[0_2px_10px_rgba(0,0,0,0.8)]">
+                                            {visualHeadline || offer}
+                                        </h1>
+                                        <p className="text-xl text-white font-bold tracking-wide drop-shadow-md">
+                                            at {businessName}
+                                        </p>
+                                    </div>
+
+                                    {/* Right Side: QR Code */}
+                                    <div className="flex-shrink-0 flex flex-col items-center justify-center">
+                                        <div className="relative bg-white p-3 rounded-2xl shadow-[0_0_30px_rgba(0,0,0,0.5)] transform transition-transform duration-300 group-hover:scale-105">
+                                            {/* Simulated QR Code (SVG) */}
+                                            <svg viewBox="0 0 100 100" className="w-32 h-32 md:w-40 md:h-40 text-black">
+                                                <path fill="currentColor" d="M10,10 h30 v30 h-30 z M15,15 v20 h20 v-20 z M50,10 h10 v10 h-10 z M70,10 h20 v20 h-20 z M10,60 h30 v30 h-30 z M15,65 v20 h20 v-20 z M50,50 h10 v10 h-10 z M70,70 h10 v10 h-10 z M30,50 h10 v10 h-10 z M80,80 h10 v10 h-10 z M60,60 h10 v10 h-10 z" />
+                                                <rect x="45" y="45" width="10" height="10" fill="currentColor" />
+                                                <rect x="65" y="45" width="10" height="10" fill="currentColor" />
+                                                <rect x="45" y="65" width="10" height="10" fill="currentColor" />
+                                                <rect x="80" y="50" width="10" height="10" fill="currentColor" />
+                                            </svg>
+                                            <div className="absolute -bottom-3 -right-3 bg-brand-primary text-brand-dark text-[10px] font-bold px-2 py-1 rounded-full shadow-lg border border-white">
+                                                SCAN ME
+                                            </div>
+                                        </div>
+                                        <p className="mt-4 text-brand-primary font-black uppercase tracking-[0.2em] text-sm animate-pulse drop-shadow-md">
+                                            Scan Now
+                                        </p>
+                                    </div>
                                 </div>
 
-                                {/* Right Side: QR Code */}
-                                <div className="flex-shrink-0 flex flex-col items-center justify-center">
-                                    <div className="relative bg-white p-3 rounded-2xl shadow-[0_0_30px_rgba(0,0,0,0.5)] transform transition-transform duration-300 group-hover:scale-105">
-                                        {/* Simulated QR Code (SVG) */}
-                                        <svg viewBox="0 0 100 100" className="w-32 h-32 md:w-40 md:h-40 text-black">
-                                            <path fill="currentColor" d="M10,10 h30 v30 h-30 z M15,15 v20 h20 v-20 z M50,10 h10 v10 h-10 z M70,10 h20 v20 h-20 z M10,60 h30 v30 h-30 z M15,65 v20 h20 v-20 z M50,50 h10 v10 h-10 z M70,70 h10 v10 h-10 z M30,50 h10 v10 h-10 z M80,80 h10 v10 h-10 z M60,60 h10 v10 h-10 z" />
-                                            <rect x="45" y="45" width="10" height="10" fill="currentColor" />
-                                            <rect x="65" y="45" width="10" height="10" fill="currentColor" />
-                                            <rect x="45" y="65" width="10" height="10" fill="currentColor" />
-                                            <rect x="80" y="50" width="10" height="10" fill="currentColor" />
-                                        </svg>
-                                        <div className="absolute -bottom-3 -right-3 bg-brand-primary text-brand-dark text-[10px] font-bold px-2 py-1 rounded-full shadow-lg border border-white">
-                                            SCAN ME
+                                {/* Bottom Bar / Playback Controls */}
+                                <div className="absolute bottom-0 w-full bg-black/60 backdrop-blur-md border-t border-white/10 p-4 flex items-center justify-between z-20">
+                                    <div className="flex items-center space-x-4">
+                                        <button 
+                                            onClick={togglePlayback}
+                                            className="w-10 h-10 rounded-full bg-brand-primary text-brand-dark flex items-center justify-center hover:bg-white transition-colors shadow-lg"
+                                        >
+                                            {isPlaying ? <Square className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current ml-0.5" />}
+                                        </button>
+                                        
+                                        {/* Simulated Audio Visualizer */}
+                                        <div className="flex space-x-1 h-6 items-end">
+                                            {[...Array(10)].map((_, i) => (
+                                                <div 
+                                                    key={i} 
+                                                    className={`w-1 bg-brand-primary rounded-t-sm transition-all duration-150 ${isPlaying ? 'animate-music-bar' : 'h-1 opacity-30'}`}
+                                                    style={{ 
+                                                        height: isPlaying ? `${Math.random() * 100}%` : '4px',
+                                                        animationDelay: `${i * 0.05}s`
+                                                    }}
+                                                ></div>
+                                            ))}
                                         </div>
                                     </div>
-                                    <p className="mt-4 text-brand-primary font-black uppercase tracking-[0.2em] text-sm animate-pulse drop-shadow-md">
-                                        Scan Now
-                                    </p>
-                                </div>
-                            </div>
-
-                            {/* Bottom Bar / Playback Controls */}
-                            <div className="absolute bottom-0 w-full bg-black/60 backdrop-blur-md border-t border-white/10 p-4 flex items-center justify-between z-20">
-                                <div className="flex items-center space-x-4">
-                                    <button 
-                                        onClick={togglePlayback}
-                                        className="w-10 h-10 rounded-full bg-brand-primary text-brand-dark flex items-center justify-center hover:bg-white transition-colors shadow-lg"
-                                    >
-                                        {isPlaying ? <Square className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current ml-0.5" />}
-                                    </button>
                                     
-                                    {/* Simulated Audio Visualizer */}
-                                    <div className="flex space-x-1 h-6 items-end">
-                                        {[...Array(10)].map((_, i) => (
-                                            <div 
-                                                key={i} 
-                                                className={`w-1 bg-brand-primary rounded-t-sm transition-all duration-150 ${isPlaying ? 'animate-music-bar' : 'h-1 opacity-30'}`}
-                                                style={{ 
-                                                    height: isPlaying ? `${Math.random() * 100}%` : '4px',
-                                                    animationDelay: `${i * 0.05}s`
-                                                }}
-                                            ></div>
-                                        ))}
-                                    </div>
-                                </div>
-                                
-                                <div className="flex items-center space-x-3 text-xs font-mono text-gray-400">
-                                    <div className="flex items-center">
-                                      <Music className="w-3 h-3 mr-1" />
-                                      <span className="hidden sm:inline">MUSIC</span>
-                                    </div>
-                                    <div className="w-px h-3 bg-gray-600"></div>
-                                    <div className="flex items-center">
-                                      <Volume2 className="w-3 h-3 mr-1" />
-                                      <span className="hidden sm:inline">AI VOICEOVER</span>
+                                    <div className="flex items-center space-x-3 text-xs font-mono text-gray-400">
+                                        <div className="flex items-center">
+                                          <Music className="w-3 h-3 mr-1" />
+                                          <span className="hidden sm:inline">MUSIC</span>
+                                        </div>
+                                        <div className="w-px h-3 bg-gray-600"></div>
+                                        <div className="flex items-center">
+                                          <Volume2 className="w-3 h-3 mr-1" />
+                                          <span className="hidden sm:inline">AI VOICEOVER</span>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
+
+                            {/* TV Brand Logo */}
+                            <div className="absolute bottom-1.5 left-1/2 transform -translate-x-1/2">
+                               <div className="text-[10px] font-bold text-gray-600 tracking-widest uppercase">Sony</div>
+                            </div>
                         </div>
 
-                        {/* TV Brand Logo */}
-                        <div className="absolute bottom-1.5 left-1/2 transform -translate-x-1/2">
-                           <div className="text-[10px] font-bold text-gray-600 tracking-widest uppercase">Sony</div>
-                        </div>
+                        {/* Reflection/Shadow */}
+                        <div className="absolute -bottom-4 left-4 right-4 h-4 bg-black/50 blur-xl rounded-[50%]"></div>
                     </div>
 
-                    {/* Reflection/Shadow */}
-                    <div className="absolute -bottom-4 left-4 right-4 h-4 bg-black/50 blur-xl rounded-[50%]"></div>
+                    {/* NEW CTA BUTTON */}
+                    <a 
+                      href="https://tidycal.com/tv/amkhan"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="group relative px-10 py-5 bg-brand-primary text-brand-dark text-xl font-black rounded-full overflow-hidden transition-all duration-300 shadow-[0_0_30px_rgba(0,196,180,0.4)] hover:shadow-[0_0_50px_rgba(0,196,180,0.6)] transform hover:-translate-y-1"
+                    >
+                      <span className="relative z-10 flex items-center justify-center uppercase tracking-widest">
+                        Book Your Call
+                        <ArrowRight className="ml-3 w-6 h-6 group-hover:translate-x-1 transition-transform" />
+                      </span>
+                      <div className="absolute inset-0 bg-white/30 transform -translate-x-full group-hover:translate-x-0 transition-transform duration-300 skew-x-12"></div>
+                    </a>
                 </div>
              )}
           </div>

@@ -20,7 +20,7 @@ const Hero: React.FC = () => {
             <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></div>
           </div>
           <span className="text-gray-300 font-medium text-xs uppercase tracking-widest">
-            Accepting Partners for Q4
+            Accepting New Partners for 2026
           </span>
         </div>
         
