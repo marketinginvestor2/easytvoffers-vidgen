@@ -9,7 +9,9 @@ export default defineConfig(({ mode }) => {
     plugins: [react()],
     define: {
       // This ensures your code using process.env.API_KEY works in the browser
-      'process.env.API_KEY': JSON.stringify(env.API_KEY)
+      'process.env.API_KEY': JSON.stringify(env.API_KEY),
+      // Expose the QR.IO API Key
+      'process.env.QR_IO_API_KEY': JSON.stringify(env.QR_IO_API_KEY)
     }
   }
 })

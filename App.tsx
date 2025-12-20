@@ -7,6 +7,7 @@ import Process from './components/Process';
 import Testimonials from './components/Testimonials';
 import AdScriptGenerator from './components/AdScriptGenerator';
 import Footer from './components/Footer';
+import FloatingCallButton from './components/FloatingCallButton';
 
 function App() {
   return (
@@ -14,13 +15,14 @@ function App() {
       <Navigation />
       <main>
         <Hero />
+        <AdScriptGenerator />
         <ProblemSolution />
         <Features />
-        <AdScriptGenerator />
         <Process />
         <Testimonials />
       </main>
       <Footer />
+      <FloatingCallButton />
     </div>
   );
 }

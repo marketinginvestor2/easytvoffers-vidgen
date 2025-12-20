@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { generateTvCommercial } from '../services/geminiService';
-import { Wand2, Loader2, Play, Square, Volume2, Radio, Music, ArrowRight } from 'lucide-react';
+import { generateTvCommercial, refineTvCommercial } from '../services/geminiService';
+import { submitLead } from '../services/leadService';
+import { generateQrCode } from '../services/qrService';
+import { Wand2, Loader2, Play, Square, Volume2, Radio, Music, ArrowRight, RefreshCw, Download, Check, Mail, User, Phone, Globe, MessageSquare, Smartphone } from 'lucide-react';
 
 // Reliable source for royalty-free upbeat background music
 const BACKGROUND_MUSIC_URL = 'https://cdn.pixabay.com/audio/2024/01/16/audio_e2b992254f.mp3'; // Energetic Upbeat Corporate
@@ -11,6 +13,10 @@ const AdScriptGenerator: React.FC = () => {
   const [offer, setOffer] = useState('');
   const [extraInfo, setExtraInfo] = useState('');
   
+  // QR Code Action State
+  const [qrType, setQrType] = useState<'url' | 'tel' | 'sms'>('url');
+  const [qrValue, setQrValue] = useState('');
+  
   const [view, setView] = useState<'form' | 'simulator'>('form');
   const [isLoading, setIsLoading] = useState(false);
   const [loadingStep, setLoadingStep] = useState('');
@@ -19,8 +25,21 @@ const AdScriptGenerator: React.FC = () => {
   const [visualHeadline, setVisualHeadline] = useState('');
   const [audioData, setAudioData] = useState<string | null>(null);
   const [imageData, setImageData] = useState<string | null>(null);
+  const [isScreenshot, setIsScreenshot] = useState(false);
+  const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   
+  // Refinement & Lead Gen States
+  const [activeAction, setActiveAction] = useState<'none' | 'refine' | 'email'>('none');
+  const [refinePrompt, setRefinePrompt] = useState('');
+  
+  // Lead Form State
+  const [leadName, setLeadName] = useState('');
+  const [leadEmail, setLeadEmail] = useState('');
+  const [leadPhone, setLeadPhone] = useState('');
+  const [isSubmittingLead, setIsSubmittingLead] = useState(false);
+  const [emailSent, setEmailSent] = useState(false);
+
   // Audio Refs
   const audioContextRef = useRef<AudioContext | null>(null);
   const voiceNodeRef = useRef<AudioBufferSourceNode | null>(null);
@@ -62,16 +81,42 @@ const AdScriptGenerator: React.FC = () => {
     
     try {
       // Simulate steps for UX
-      setTimeout(() => setLoadingStep('Rewriting offer for TV...'), 1000);
-      setTimeout(() => setLoadingStep('Generating broadcast visuals...'), 2500);
+      setTimeout(() => setLoadingStep('Drafting professional script...'), 1000);
+      setTimeout(() => setLoadingStep('Designing broadcast visuals...'), 2500);
       
-      const result = await generateTvCommercial(businessName, businessType, offer, extraInfo);
+      // Determine QR Code Data & Website URL for screenshot
+      let finalQrData = 'https://easytvoffers.com';
+      let websiteUrlForScreenshot = '';
+      const cleanedQrValue = qrValue.trim();
+
+      if (cleanedQrValue) {
+        if (qrType === 'url') {
+          // Ensure URL has protocol
+          finalQrData = cleanedQrValue.startsWith('http') ? cleanedQrValue : `https://${cleanedQrValue}`;
+          websiteUrlForScreenshot = finalQrData;
+        } else if (qrType === 'tel') {
+          finalQrData = `tel:${cleanedQrValue}`;
+        } else if (qrType === 'sms') {
+          finalQrData = `sms:${cleanedQrValue}`;
+        }
+      }
+
+      // Generate Commercial Content (Script, Voice, Visuals)
+      const resultPromise = generateTvCommercial(businessName, businessType, offer, extraInfo, websiteUrlForScreenshot);
+      
+      // Generate Named Dynamic QR code
+      const campaignName = `${businessName} - ${new Date().toLocaleDateString()}`;
+      const qrPromise = generateQrCode(finalQrData, '#000000', campaignName); 
+
+      const [result, qrUrl] = await Promise.all([resultPromise, qrPromise]);
       
       setLoadingStep('Recording professional voiceover...');
       setScript(result.script);
       setVisualHeadline(result.visualHeadline);
       setAudioData(result.audioBase64);
       setImageData(result.imageBase64);
+      setIsScreenshot(!!result.isScreenshot);
+      setQrCodeUrl(qrUrl);
       
       await new Promise(resolve => setTimeout(resolve, 800));
 
@@ -79,11 +124,92 @@ const AdScriptGenerator: React.FC = () => {
       // Auto-play
       setTimeout(() => playAudio(result.audioBase64), 1000);
       
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      alert("Something went wrong generating your commercial. Please try again.");
+      // Display the actual error message to help the user debug (e.g. "API Key Missing", "Quota Exceeded")
+      alert(`Error: ${error.message || "System encountered an issue. Please check your internet or API configuration."}`);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleRefine = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!refinePrompt) return;
+
+    stopAudio();
+    setIsLoading(true);
+    setLoadingStep('Updating script based on feedback...');
+    setActiveAction('none');
+
+    try {
+      const result = await refineTvCommercial(businessName, businessType, script, refinePrompt);
+      
+      setLoadingStep('Recording new voiceover...');
+      setScript(result.script);
+      setVisualHeadline(result.visualHeadline);
+      setAudioData(result.audioBase64);
+      // For refinement, we usually get a new AI image unless we handle screenshot persistence, 
+      // but for simplicity we allow the AI to generate a scene matching the new context.
+      if (result.imageBase64) {
+        setImageData(result.imageBase64);
+        setIsScreenshot(false); // Refined images are AI generated
+      }
+      
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      setRefinePrompt(''); // Clear prompt
+      setTimeout(() => playAudio(result.audioBase64), 500);
+
+    } catch (error: any) {
+      console.error(error);
+      alert(`Could not refine the video: ${error.message}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleLeadSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!leadEmail || !leadName || !leadPhone) return;
+    
+    setIsSubmittingLead(true);
+    
+    // Explicitly construct payload to ensure all state is captured
+    const payload = {
+      name: leadName,
+      email: leadEmail,
+      phone: leadPhone,
+      businessName,
+      businessType,
+      offer,
+      extraInfo,
+      qrType,
+      qrValue,
+      script
+    };
+
+    try {
+      const success = await submitLead(payload);
+      
+      if (success) {
+        setEmailSent(true);
+        setTimeout(() => {
+          setActiveAction('none');
+          setEmailSent(false); // Reset for future
+          setLeadName('');
+          setLeadEmail('');
+          setLeadPhone('');
+        }, 3000);
+      } else {
+        // Fallback alert if the service returns false (e.g. bad URL)
+        alert("The system could not send your data. Please check your internet connection.");
+      }
+    } catch (error) {
+      console.error(error);
+      alert("There was an issue sending your info. Please try again.");
+    } finally {
+      setIsSubmittingLead(false);
     }
   };
 
@@ -154,15 +280,29 @@ const AdScriptGenerator: React.FC = () => {
         musicSource.start(0);
       }
 
-      // 3. Handle End
+      // 3. Handle End - EXTENDED FOR 5 SECONDS
       voiceSource.onended = () => {
-        setIsPlaying(false);
-        // Fade out music
+        // Voice is done, but we keep playing music and visuals for 5 seconds
+        // to allow for Call To Action
+        
         if (musicGainNodeRef.current) {
-          musicGainNodeRef.current.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.5);
+          // Schedule fade out to happen at end of the 5s window
+          const fadeStartTime = ctx.currentTime + 3.5; // Start fading after 3.5s
+          const stopTime = ctx.currentTime + 5.0;      // Stop completely at 5s
+          
+          // Maintain volume for a bit
+          musicGainNodeRef.current.gain.setValueAtTime(0.1, fadeStartTime);
+          // Exponential fade to near zero
+          musicGainNodeRef.current.gain.exponentialRampToValueAtTime(0.001, stopTime);
+
           setTimeout(() => {
-             if (musicNodeRef.current) musicNodeRef.current.stop();
-          }, 1500);
+             stopAudio(); // This sets isPlaying(false)
+          }, 5000);
+        } else {
+            // If no music, still wait 5s to stop visuals
+            setTimeout(() => {
+                stopAudio();
+            }, 5000);
         }
       };
       
@@ -195,8 +335,8 @@ const AdScriptGenerator: React.FC = () => {
   };
 
   return (
-    <section id="generator" className="py-24 bg-brand-dark text-white relative overflow-hidden">
-      {/* CSS for Ken Burns Effect */}
+    <section id="generator" className="py-24 bg-white text-brand-dark relative overflow-hidden border-t border-gray-100">
+      {/* CSS Animations */}
       <style>{`
         @keyframes kenBurns {
           0% { transform: scale(1.0) translate(0, 0); }
@@ -206,96 +346,138 @@ const AdScriptGenerator: React.FC = () => {
         .animate-ken-burns {
           animation: kenBurns 20s ease-in-out infinite alternate;
         }
+        
+        @keyframes scrollVertical {
+          0% { transform: translateY(0); }
+          100% { transform: translateY(-30%); }
+        }
+        .animate-scroll-vertical {
+          animation: scrollVertical 15s ease-in-out infinite alternate;
+        }
       `}</style>
+      
+      {/* Top Gradient Separator */}
+      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-brand-primary/20 to-transparent"></div>
 
       {/* Background Shapes */}
-      <div className="absolute top-0 right-0 w-[800px] h-[800px] bg-brand-primary/10 rounded-full blur-[120px] -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
-      <div className="absolute bottom-0 left-0 w-[600px] h-[600px] bg-blue-900/20 rounded-full blur-[100px] translate-y-1/2 -translate-x-1/2 pointer-events-none"></div>
+      <div className="absolute top-0 right-0 w-[800px] h-[800px] bg-brand-primary/5 rounded-full blur-[120px] -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
+      <div className="absolute bottom-0 left-0 w-[600px] h-[600px] bg-blue-100/40 rounded-full blur-[100px] translate-y-1/2 -translate-x-1/2 pointer-events-none"></div>
       
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         
         {/* Header */}
         <div className="text-center mb-16">
-           <div className="inline-flex items-center space-x-2 bg-white/5 border border-white/10 rounded-full px-4 py-1.5 mb-6">
+           <div className="inline-flex items-center space-x-2 bg-brand-primary/10 border border-brand-primary/20 rounded-full px-4 py-1.5 mb-6">
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-primary opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-brand-primary"></span>
               </span>
-              <span className="text-gray-300 font-bold text-xs uppercase tracking-widest">
-                AI Commercial Simulator
+              <span className="text-brand-dark font-bold text-xs uppercase tracking-widest">
+                AI Commercial Preview
               </span>
            </div>
-           <h2 className="text-4xl md:text-5xl font-black tracking-tight mb-4">
-             Experience Your Brand on TV <br/>
-             <span className="text-brand-primary">In Real Time.</span>
+           <h2 className="text-4xl md:text-5xl font-black tracking-tight mb-4 text-brand-dark">
+             Visualize Your TV Campaign.
            </h2>
-           <p className="text-gray-400 max-w-2xl mx-auto text-lg">
-             Enter your details below to generate a live TV spot preview, complete with voiceover, background music, and actionable QR branding.
+           <p className="text-gray-600 max-w-2xl mx-auto text-lg">
+             Enter your business details to generate a preview script, voiceover, and visual concept. No production team required.
            </p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
           
           {/* Form Side */}
-          <div className={`lg:col-span-5 transition-all duration-500 ${view === 'simulator' ? 'lg:opacity-50 blur-[1px] hover:blur-0 hover:opacity-100' : 'opacity-100'}`}>
-            <form onSubmit={handleGenerate} className="space-y-5 bg-white/5 p-8 rounded-3xl border border-white/10 backdrop-blur-md shadow-2xl relative overflow-hidden">
-               {isLoading && (
-                 <div className="absolute inset-0 bg-brand-dark/90 z-20 flex flex-col items-center justify-center text-center p-6">
-                    <Loader2 className="w-12 h-12 text-brand-primary animate-spin mb-4" />
-                    <p className="text-xl font-bold text-white animate-pulse">{loadingStep}</p>
-                 </div>
-               )}
-
+          <div className={`lg:col-span-5 transition-all duration-500 ${view === 'simulator' ? 'hidden lg:block lg:opacity-30 blur-[1px] hover:blur-0 hover:opacity-100' : 'opacity-100'}`}>
+            <form onSubmit={handleGenerate} className="space-y-5 bg-white p-8 rounded-3xl border border-gray-100 shadow-2xl relative overflow-hidden">
+              
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider mb-2 text-gray-400">Business Name</label>
+                <label className="block text-xs font-bold uppercase tracking-wider mb-2 text-gray-700">Business Name</label>
                 <input 
                   type="text" 
                   value={businessName}
                   onChange={(e) => setBusinessName(e.target.value)}
                   placeholder="e.g. Joe's Pizza"
-                  className="w-full px-5 py-4 rounded-xl bg-black/40 border border-gray-700 text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-transparent transition-all"
+                  className="w-full px-5 py-4 rounded-xl bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-transparent transition-all focus:bg-white"
                   required
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider mb-2 text-gray-400">Business Type</label>
+                <label className="block text-xs font-bold uppercase tracking-wider mb-2 text-gray-700">Business Type</label>
                 <input 
                   type="text" 
                   value={businessType}
                   onChange={(e) => setBusinessType(e.target.value)}
                   placeholder="e.g. Italian Restaurant"
-                  className="w-full px-5 py-4 rounded-xl bg-black/40 border border-gray-700 text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-transparent transition-all"
+                  className="w-full px-5 py-4 rounded-xl bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-transparent transition-all focus:bg-white"
                   required
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider mb-2 text-gray-400">Core Offer</label>
+                <label className="block text-xs font-bold uppercase tracking-wider mb-2 text-gray-700">Core Offer</label>
                 <input 
                   type="text" 
                   value={offer}
                   onChange={(e) => setOffer(e.target.value)}
                   placeholder="e.g. Free appetizer with large pizza"
-                  className="w-full px-5 py-4 rounded-xl bg-black/40 border border-gray-700 text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-transparent transition-all"
+                  className="w-full px-5 py-4 rounded-xl bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-transparent transition-all focus:bg-white"
                   required
                 />
               </div>
+
+              {/* QR Action Selection */}
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider mb-2 text-gray-400">Additional Info (Optional)</label>
+                <label className="block text-xs font-bold uppercase tracking-wider mb-2 text-gray-700">
+                  QR Destination <span className="text-gray-400 font-normal lowercase">(Optional)</span>
+                </label>
+                <div className="flex rounded-xl bg-gray-50 border border-gray-200 overflow-hidden focus-within:ring-2 focus-within:ring-brand-primary focus-within:border-transparent transition-all">
+                  <div className="relative border-r border-gray-200 bg-gray-100">
+                      <select
+                          value={qrType}
+                          onChange={(e) => setQrType(e.target.value as any)}
+                          className="h-full pl-3 pr-8 py-4 bg-transparent text-gray-700 text-sm font-bold focus:outline-none cursor-pointer appearance-none"
+                      >
+                          <option value="url">Website</option>
+                          <option value="tel">Call</option>
+                          <option value="sms">SMS</option>
+                      </select>
+                      {/* Custom dropdown arrow */}
+                      <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-500">
+                        <svg className="h-4 w-4 fill-current" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" fillRule="evenodd"></path></svg>
+                      </div>
+                  </div>
+                  <input 
+                    type={qrType === 'url' ? 'text' : 'tel'}
+                    value={qrValue}
+                    onChange={(e) => setQrValue(e.target.value)}
+                    placeholder={
+                        qrType === 'url' ? 'e.g. easytvoffers.com' : 
+                        qrType === 'tel' ? 'e.g. 555-0199' : 'e.g. 555-0199'
+                    }
+                    className="flex-1 px-5 py-4 bg-transparent text-gray-900 placeholder-gray-400 focus:outline-none"
+                  />
+                </div>
+                <p className="text-[10px] text-gray-400 mt-2 pl-1 flex items-center">
+                  <Globe className="w-3 h-3 mr-1" /> If URL is provided, we'll feature it on screen!
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider mb-2 text-gray-700">Additional Info (Optional)</label>
                 <textarea 
                   value={extraInfo}
                   onChange={(e) => setExtraInfo(e.target.value)}
                   placeholder="e.g. Family owned since 1985, located downtown..."
                   rows={2}
-                  className="w-full px-5 py-4 rounded-xl bg-black/40 border border-gray-700 text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-transparent transition-all resize-none"
+                  className="w-full px-5 py-4 rounded-xl bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-transparent transition-all focus:bg-white resize-none"
                 />
               </div>
               <button 
                 type="submit" 
                 disabled={isLoading}
-                className="w-full py-4 mt-2 bg-brand-primary text-brand-dark font-bold rounded-xl hover:bg-white hover:text-brand-dark transition-all flex items-center justify-center text-lg disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(0,196,180,0.3)] hover:shadow-[0_0_30px_rgba(0,196,180,0.5)] transform hover:-translate-y-0.5"
+                className="w-full py-4 mt-2 bg-brand-primary text-brand-dark font-bold rounded-xl hover:bg-brand-dark hover:text-white transition-all flex items-center justify-center text-lg disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(0,196,180,0.3)] hover:shadow-[0_0_30px_rgba(0,196,180,0.5)] transform hover:-translate-y-0.5"
               >
                 <Wand2 className="w-5 h-5 mr-3" />
-                Preview Commercial
+                Generate Preview
               </button>
             </form>
           </div>
@@ -304,29 +486,44 @@ const AdScriptGenerator: React.FC = () => {
           <div className="lg:col-span-7 relative flex justify-center perspective-1000">
              {view === 'form' ? (
                 // Placeholder State
-                <div className="w-full aspect-video bg-gray-800/50 rounded-3xl border border-gray-700 flex flex-col items-center justify-center text-gray-600 p-8 text-center relative overflow-hidden group">
-                   <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700"></div>
-                   <Radio className="w-24 h-24 mb-6 opacity-20" />
-                   <h3 className="text-2xl font-bold mb-2">Ready to Broadcast</h3>
-                   <p className="max-w-xs">Fill out the brief to generate your custom TV spot instantly.</p>
+                <div className="w-full aspect-video bg-gray-50 rounded-3xl border border-gray-200 flex flex-col items-center justify-center text-gray-500 p-8 text-center relative overflow-hidden group shadow-inner">
+                   <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700"></div>
+                   <Radio className="w-24 h-24 mb-6 opacity-20 text-brand-dark" />
+                   <h3 className="text-2xl font-bold mb-2 text-brand-dark">Ready to Preview</h3>
+                   <p className="max-w-xs text-gray-500">Enter your info to generate your preview.</p>
+                   {isLoading && (
+                    <div className="absolute inset-0 bg-white/95 z-50 flex flex-col items-center justify-center">
+                        <Loader2 className="w-16 h-16 text-brand-primary animate-spin mb-6" />
+                        <p className="text-xl font-bold text-brand-dark animate-pulse">{loadingStep}</p>
+                    </div>
+                   )}
                 </div>
              ) : (
                 // Active Simulator State
-                <div className="w-full flex flex-col items-center gap-8 animate-fade-in-up">
+                <div className="w-full flex flex-col gap-8 animate-fade-in-up">
                     <div className="relative w-full shadow-2xl">
-                        {/* TV Bezel */}
-                        <div className="relative bg-gray-900 rounded-[2rem] p-4 shadow-[0_0_50px_rgba(0,0,0,0.8)] border border-gray-800 ring-1 ring-white/10">
+                        
+                        {/* Global Loading Overlay for Refinements */}
+                        {isLoading && (
+                            <div className="absolute inset-0 bg-white/90 z-50 flex flex-col items-center justify-center rounded-[2rem] backdrop-blur-sm border border-brand-primary/20">
+                                <Loader2 className="w-12 h-12 text-brand-primary animate-spin mb-4" />
+                                <p className="text-brand-dark font-bold tracking-wide animate-pulse">{loadingStep}</p>
+                            </div>
+                        )}
+
+                        {/* TV Bezel (Remains Dark for Realism) */}
+                        <div className="relative bg-gray-900 rounded-[2rem] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.3)] border border-gray-800 ring-1 ring-white/10">
                             
                             {/* Screen Content */}
                             <div className="relative aspect-video bg-black rounded-xl overflow-hidden flex flex-col items-center justify-center border border-white/5 group">
                                 
-                                {/* Generated Background Image with Motion (Ken Burns) */}
+                                {/* Generated Background Image with Motion */}
                                 {imageData ? (
                                     <div className="absolute inset-0 overflow-hidden">
                                         <img 
                                             src={`data:image/jpeg;base64,${imageData}`} 
                                             alt="Commercial Background"
-                                            className="w-full h-full object-cover opacity-60 filter blur-sm animate-ken-burns"
+                                            className={`w-full h-full object-cover opacity-60 filter blur-[2px] ${isScreenshot ? 'animate-scroll-vertical' : 'animate-ken-burns'}`}
                                         />
                                     </div>
                                 ) : (
@@ -342,7 +539,7 @@ const AdScriptGenerator: React.FC = () => {
                                     {/* Left Side: Text Offer */}
                                     <div className="flex-1 text-left space-y-4">
                                         <div className="inline-block bg-brand-primary text-brand-dark font-black px-3 py-1 text-xs uppercase tracking-widest rounded mb-2 shadow-lg">
-                                            Limited Time Offer
+                                            Local TV Spotlight
                                         </div>
                                         <h1 className="text-3xl md:text-4xl lg:text-5xl font-black text-white leading-tight drop-shadow-[0_2px_10px_rgba(0,0,0,0.8)]">
                                             {visualHeadline || offer}
@@ -355,14 +552,17 @@ const AdScriptGenerator: React.FC = () => {
                                     {/* Right Side: QR Code */}
                                     <div className="flex-shrink-0 flex flex-col items-center justify-center">
                                         <div className="relative bg-white p-3 rounded-2xl shadow-[0_0_30px_rgba(0,0,0,0.5)] transform transition-transform duration-300 group-hover:scale-105">
-                                            {/* Simulated QR Code (SVG) */}
-                                            <svg viewBox="0 0 100 100" className="w-32 h-32 md:w-40 md:h-40 text-black">
-                                                <path fill="currentColor" d="M10,10 h30 v30 h-30 z M15,15 v20 h20 v-20 z M50,10 h10 v10 h-10 z M70,10 h20 v20 h-20 z M10,60 h30 v30 h-30 z M15,65 v20 h20 v-20 z M50,50 h10 v10 h-10 z M70,70 h10 v10 h-10 z M30,50 h10 v10 h-10 z M80,80 h10 v10 h-10 z M60,60 h10 v10 h-10 z" />
-                                                <rect x="45" y="45" width="10" height="10" fill="currentColor" />
-                                                <rect x="65" y="45" width="10" height="10" fill="currentColor" />
-                                                <rect x="45" y="65" width="10" height="10" fill="currentColor" />
-                                                <rect x="80" y="50" width="10" height="10" fill="currentColor" />
-                                            </svg>
+                                            {qrCodeUrl ? (
+                                                <img 
+                                                  src={qrCodeUrl} 
+                                                  alt="Offer QR Code" 
+                                                  className="w-32 h-32 md:w-40 md:h-40" 
+                                                />
+                                            ) : (
+                                                <div className="w-32 h-32 md:w-40 md:h-40 bg-gray-200 flex items-center justify-center">
+                                                   <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+                                                </div>
+                                            )}
                                             <div className="absolute -bottom-3 -right-3 bg-brand-primary text-brand-dark text-[10px] font-bold px-2 py-1 rounded-full shadow-lg border border-white">
                                                 SCAN ME
                                             </div>
@@ -419,22 +619,139 @@ const AdScriptGenerator: React.FC = () => {
                         </div>
 
                         {/* Reflection/Shadow */}
-                        <div className="absolute -bottom-4 left-4 right-4 h-4 bg-black/50 blur-xl rounded-[50%]"></div>
+                        <div className="absolute -bottom-4 left-4 right-4 h-4 bg-black/20 blur-xl rounded-[50%]"></div>
                     </div>
 
-                    {/* NEW CTA BUTTON */}
-                    <a 
-                      href="https://tidycal.com/tv/amkhan"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="group relative px-10 py-5 bg-brand-primary text-brand-dark text-xl font-black rounded-full overflow-hidden transition-all duration-300 shadow-[0_0_30px_rgba(0,196,180,0.4)] hover:shadow-[0_0_50px_rgba(0,196,180,0.6)] transform hover:-translate-y-1"
-                    >
-                      <span className="relative z-10 flex items-center justify-center uppercase tracking-widest">
-                        Book Your Call
-                        <ArrowRight className="ml-3 w-6 h-6 group-hover:translate-x-1 transition-transform" />
-                      </span>
-                      <div className="absolute inset-0 bg-white/30 transform -translate-x-full group-hover:translate-x-0 transition-transform duration-300 skew-x-12"></div>
-                    </a>
+                    {/* ACTION BAR: 3 BUTTONS */}
+                    <div className="flex flex-col gap-4">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        
+                        {/* Refine Button */}
+                        <button
+                          onClick={() => setActiveAction(activeAction === 'refine' ? 'none' : 'refine')}
+                          className={`flex items-center justify-center px-6 py-4 rounded-xl border-2 font-bold transition-all duration-300 ${activeAction === 'refine' ? 'bg-brand-surface text-brand-dark border-brand-primary' : 'border-gray-200 text-gray-600 hover:border-brand-primary hover:text-brand-primary hover:bg-white'}`}
+                        >
+                           <RefreshCw className={`w-5 h-5 mr-2 ${activeAction === 'refine' ? 'animate-spin-slow' : ''}`} />
+                           Refine Video
+                        </button>
+
+                         {/* Download/Lead Gen Button */}
+                        <button
+                          onClick={() => setActiveAction(activeAction === 'email' ? 'none' : 'email')}
+                          className={`flex items-center justify-center px-6 py-4 rounded-xl border-2 font-bold transition-all duration-300 ${activeAction === 'email' ? 'bg-brand-surface text-brand-dark border-brand-primary' : 'border-gray-200 text-gray-600 hover:border-brand-primary hover:text-brand-primary hover:bg-white'}`}
+                        >
+                           <Download className="w-5 h-5 mr-2" />
+                           Save & Email
+                        </button>
+
+                         {/* Book Call Button (Primary) */}
+                        <a
+                          href="https://tidycal.com/tv/amkhan"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center justify-center px-6 py-4 rounded-xl bg-brand-primary text-brand-dark font-black shadow-[0_0_20px_rgba(0,196,180,0.3)] hover:shadow-[0_0_30px_rgba(0,196,180,0.5)] transform hover:-translate-y-1 transition-all"
+                        >
+                           Book Strategy
+                           <ArrowRight className="w-5 h-5 ml-2" />
+                        </a>
+                      </div>
+
+                      {/* CONDITIONAL INPUT: REFINEMENT */}
+                      {activeAction === 'refine' && (
+                        <form onSubmit={handleRefine} className="animate-fade-in-up bg-gray-50 border border-gray-200 rounded-2xl p-6 shadow-lg">
+                           <label className="block text-sm font-bold text-gray-700 mb-2">What should we change?</label>
+                           <div className="flex flex-col md:flex-row gap-3">
+                              <input 
+                                type="text"
+                                value={refinePrompt}
+                                onChange={(e) => setRefinePrompt(e.target.value)}
+                                placeholder="e.g. Make it funnier, mention we are open late, use a different headline..."
+                                className="flex-1 bg-white border border-gray-300 rounded-lg px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                                autoFocus
+                              />
+                              <button 
+                                type="submit" 
+                                disabled={!refinePrompt || isLoading}
+                                className="bg-brand-dark text-white font-bold px-6 py-3 rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                Update Video
+                              </button>
+                           </div>
+                        </form>
+                      )}
+
+                      {/* CONDITIONAL INPUT: EMAIL CAPTURE */}
+                      {activeAction === 'email' && (
+                        <div className="animate-fade-in-up bg-gray-50 border border-gray-200 rounded-2xl p-6 shadow-lg text-center">
+                           {emailSent ? (
+                             <div className="flex flex-col items-center justify-center py-4 text-green-600">
+                                <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mb-3">
+                                  <Check className="w-6 h-6" />
+                                </div>
+                                <h4 className="text-xl font-bold">Sent!</h4>
+                                <p className="text-gray-600 text-sm">Check your inbox. We'll be in touch shortly.</p>
+                             </div>
+                           ) : (
+                             <form onSubmit={handleLeadSubmit} className="max-w-xl mx-auto text-left">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                                  <div>
+                                    <label className="block text-xs font-bold text-gray-500 mb-1">Name</label>
+                                    <div className="relative">
+                                      <User className="absolute left-3 top-3.5 w-4 h-4 text-gray-400" />
+                                      <input 
+                                        type="text"
+                                        value={leadName}
+                                        onChange={(e) => setLeadName(e.target.value)}
+                                        className="w-full bg-white border border-gray-300 rounded-lg pl-9 pr-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                                        required
+                                        placeholder="John Doe"
+                                      />
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <label className="block text-xs font-bold text-gray-500 mb-1">Phone</label>
+                                    <div className="relative">
+                                      <Phone className="absolute left-3 top-3.5 w-4 h-4 text-gray-400" />
+                                      <input 
+                                        type="tel"
+                                        value={leadPhone}
+                                        onChange={(e) => setLeadPhone(e.target.value)}
+                                        className="w-full bg-white border border-gray-300 rounded-lg pl-9 pr-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                                        required
+                                        placeholder="(555) 123-4567"
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+                                
+                                <div className="mb-4">
+                                  <label className="block text-xs font-bold text-gray-500 mb-1">Email</label>
+                                  <div className="relative">
+                                    <Mail className="absolute left-3 top-3.5 w-4 h-4 text-gray-400" />
+                                    <input 
+                                      type="email"
+                                      value={leadEmail}
+                                      onChange={(e) => setLeadEmail(e.target.value)}
+                                      className="w-full bg-white border border-gray-300 rounded-lg pl-9 pr-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-primary"
+                                      required
+                                      placeholder="john@example.com"
+                                    />
+                                  </div>
+                                </div>
+
+                                <button 
+                                  type="submit" 
+                                  disabled={isSubmittingLead}
+                                  className="w-full bg-brand-primary text-brand-dark font-bold px-6 py-3 rounded-lg hover:bg-brand-dark hover:text-white transition-colors disabled:opacity-50"
+                                >
+                                  {isSubmittingLead ? 'Sending...' : 'Send Video & Pricing'}
+                                </button>
+                                <p className="text-xs text-center text-gray-500 mt-4">We'll send your video preview and pricing details ($99/mo per ZIP).</p>
+                             </form>
+                           )}
+                        </div>
+                      )}
+                    </div>
                 </div>
              )}
           </div>

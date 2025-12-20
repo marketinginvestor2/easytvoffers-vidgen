@@ -20,7 +20,7 @@ const Footer: React.FC = () => {
               </span>
             </div>
             <p className="text-base text-gray-400 leading-relaxed max-w-md">
-              The premier Done-For-You Connected TV advertising agency. We empower local businesses to reclaim their market share from social media giants with broadcast-quality campaigns and programmatic precision.
+              Simple, accessible Connected TV advertising for local businesses. We empower you to reach your market with broadcast-quality campaigns and programmatic precision.
             </p>
             <div className="flex items-center space-x-4">
                <div className="flex items-center space-x-2 text-xs font-bold text-white bg-white/5 px-3 py-1.5 rounded-full border border-white/10">
@@ -39,7 +39,7 @@ const Footer: React.FC = () => {
 
           {/* Contact & Action Column */}
           <div className="lg:col-span-5 bg-white/5 rounded-3xl p-8 border border-white/10 hover:border-brand-primary/30 transition-colors">
-            <h4 className="text-white font-bold text-xl mb-6">Ready to dominate your local market?</h4>
+            <h4 className="text-white font-bold text-xl mb-6">Ready to test the local market?</h4>
             
             <div className="space-y-6">
               <div className="flex flex-col space-y-4">
@@ -65,7 +65,7 @@ const Footer: React.FC = () => {
               </a>
               
               <p className="text-center text-sm text-gray-500">
-                No commitment required. 15-minute discovery chat.
+                30-day free trial available for qualified businesses.
               </p>
             </div>
           </div>

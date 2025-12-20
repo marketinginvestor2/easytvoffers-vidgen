@@ -6,6 +6,7 @@ export interface Testimonial {
   type: string;
   quote: string;
   result: string;
+  videoId?: string;
 }
 
 export interface Feature {
