@@ -11,7 +11,7 @@ import FloatingCallButton from './components/FloatingCallButton';
 
 function App() {
   return (
-    <div className="font-sans text-brand-dark overflow-x-hidden bg-white">
+    <div className="font-sans text-brand-dark overflow-x-hidden bg-white selection:bg-brand-primary selection:text-brand-dark">
       <Navigation />
       <main>
         <Hero />

@@ -1,759 +1,407 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { generateTvCommercial, refineTvCommercial } from '../services/geminiService';
-import { submitLead } from '../services/leadService';
+import { generateTvCommercial, searchBusinesses, BusinessCandidate } from '../services/geminiService';
 import { generateQrCode } from '../services/qrService';
-import { Wand2, Loader2, Play, Square, Volume2, Radio, Music, ArrowRight, RefreshCw, Download, Check, Mail, User, Phone, Globe, MessageSquare, Smartphone } from 'lucide-react';
+import { Wand2, Loader2, Play, Square, MapPin, Check, ShieldCheck, Phone, Tv, CreditCard, Minus, Plus, RefreshCw, X, Sparkles } from 'lucide-react';
 
-// Reliable source for royalty-free upbeat background music
-const BACKGROUND_MUSIC_URL = 'https://cdn.pixabay.com/audio/2024/01/16/audio_e2b992254f.mp3'; // Energetic Upbeat Corporate
+const BACKGROUND_MUSIC_URL = 'https://cdn.pixabay.com/audio/2024/01/16/audio_e2b992254f.mp3';
 
 const AdScriptGenerator: React.FC = () => {
-  const [businessName, setBusinessName] = useState('');
-  const [businessType, setBusinessType] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [cityQuery, setCityQuery] = useState('');
+  const [businessCandidates, setBusinessCandidates] = useState<BusinessCandidate[]>([]);
+  const [selectedBusiness, setSelectedBusiness] = useState<BusinessCandidate | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
   const [offer, setOffer] = useState('');
-  const [extraInfo, setExtraInfo] = useState('');
-  
-  // QR Code Action State
-  const [qrType, setQrType] = useState<'url' | 'tel' | 'sms'>('url');
-  const [qrValue, setQrValue] = useState('');
-  
   const [view, setView] = useState<'form' | 'simulator'>('form');
   const [isLoading, setIsLoading] = useState(false);
-  const [loadingStep, setLoadingStep] = useState('');
+  const [loadingStep, setInLoadingStep] = useState('');
   
-  const [script, setScript] = useState('');
   const [visualHeadline, setVisualHeadline] = useState('');
   const [audioData, setAudioData] = useState<string | null>(null);
   const [imageData, setImageData] = useState<string | null>(null);
-  const [isScreenshot, setIsScreenshot] = useState(false);
   const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  
-  // Refinement & Lead Gen States
-  const [activeAction, setActiveAction] = useState<'none' | 'refine' | 'email'>('none');
-  const [refinePrompt, setRefinePrompt] = useState('');
-  
-  // Lead Form State
-  const [leadName, setLeadName] = useState('');
-  const [leadEmail, setLeadEmail] = useState('');
-  const [leadPhone, setLeadPhone] = useState('');
-  const [isSubmittingLead, setIsSubmittingLead] = useState(false);
-  const [emailSent, setEmailSent] = useState(false);
+  const [zipCount, setZipCount] = useState(1);
+  const [isTrial, setIsTrial] = useState(true);
 
-  // Audio Refs
   const audioContextRef = useRef<AudioContext | null>(null);
   const voiceNodeRef = useRef<AudioBufferSourceNode | null>(null);
   const musicNodeRef = useRef<AudioBufferSourceNode | null>(null);
-  const musicGainNodeRef = useRef<GainNode | null>(null);
   const musicBufferRef = useRef<AudioBuffer | null>(null);
 
   useEffect(() => {
-    // Pre-load background music
     const loadMusic = async () => {
       try {
         const response = await fetch(BACKGROUND_MUSIC_URL);
-        if (!response.ok) throw new Error("Network response was not ok");
         const arrayBuffer = await response.arrayBuffer();
         const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
         const decoded = await ctx.decodeAudioData(arrayBuffer);
         musicBufferRef.current = decoded;
         ctx.close();
-      } catch (err) {
-        console.warn("Could not preload background music", err);
-      }
+      } catch (err) { console.warn("Music fail", err); }
     };
     loadMusic();
-
-    return () => {
-      stopAudio();
-      if (audioContextRef.current) {
-        audioContextRef.current.close();
-      }
-    };
+    return () => stopAudio();
   }, []);
+
+  useEffect(() => {
+    if (!searchQuery || selectedBusiness || searchQuery.length < 3) {
+      setBusinessCandidates([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      setIsSearching(true);
+      try {
+        const candidates = await searchBusinesses(searchQuery, cityQuery);
+        setBusinessCandidates(candidates);
+      } catch (e) { console.error(e); } finally { setIsSearching(false); }
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [searchQuery, cityQuery, selectedBusiness]);
 
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!businessName || !businessType || !offer) return;
-
+    if (!selectedBusiness) return;
+    
     setIsLoading(true);
-    setLoadingStep('Analyzing market data...');
+    setInLoadingStep("Connecting Local Feed...");
     
     try {
-      // Simulate steps for UX
-      setTimeout(() => setLoadingStep('Drafting professional script...'), 1000);
-      setTimeout(() => setLoadingStep('Designing broadcast visuals...'), 2500);
+      setInLoadingStep("Generating Visual Identity...");
+      const result = await generateTvCommercial(selectedBusiness, offer, cityQuery);
       
-      // Determine QR Code Data & Website URL for screenshot
-      let finalQrData = 'https://easytvoffers.com';
-      let websiteUrlForScreenshot = '';
-      const cleanedQrValue = qrValue.trim();
-
-      if (cleanedQrValue) {
-        if (qrType === 'url') {
-          // Ensure URL has protocol
-          finalQrData = cleanedQrValue.startsWith('http') ? cleanedQrValue : `https://${cleanedQrValue}`;
-          websiteUrlForScreenshot = finalQrData;
-        } else if (qrType === 'tel') {
-          finalQrData = `tel:${cleanedQrValue}`;
-        } else if (qrType === 'sms') {
-          finalQrData = `sms:${cleanedQrValue}`;
-        }
-      }
-
-      // Generate Commercial Content (Script, Voice, Visuals)
-      const resultPromise = generateTvCommercial(businessName, businessType, offer, extraInfo, websiteUrlForScreenshot);
+      setInLoadingStep("Routing QR Navigation...");
+      const qrUrl = await generateQrCode(selectedBusiness.mapsUri, '#000000', selectedBusiness.name);
       
-      // Generate Named Dynamic QR code
-      const campaignName = `${businessName} - ${new Date().toLocaleDateString()}`;
-      const qrPromise = generateQrCode(finalQrData, '#000000', campaignName); 
-
-      const [result, qrUrl] = await Promise.all([resultPromise, qrPromise]);
-      
-      setLoadingStep('Recording professional voiceover...');
-      setScript(result.script);
       setVisualHeadline(result.visualHeadline);
       setAudioData(result.audioBase64);
       setImageData(result.imageBase64);
-      setIsScreenshot(!!result.isScreenshot);
       setQrCodeUrl(qrUrl);
       
-      await new Promise(resolve => setTimeout(resolve, 800));
-
-      setView('simulator');
-      // Auto-play
-      setTimeout(() => playAudio(result.audioBase64), 1000);
-      
+      setInLoadingStep("Final Broadcast Mastering...");
+      setTimeout(() => {
+        setView('simulator');
+        playAudio(result.audioBase64);
+      }, 1000);
     } catch (error: any) {
       console.error(error);
-      // Display the actual error message to help the user debug (e.g. "API Key Missing", "Quota Exceeded")
-      alert(`Error: ${error.message || "System encountered an issue. Please check your internet or API configuration."}`);
-    } finally {
-      setIsLoading(false);
+      alert(`Error: ${error.message || "Failed to generate preview. Try again."}`);
+    } finally { 
+      setIsLoading(false); 
     }
   };
 
-  const handleRefine = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!refinePrompt) return;
-
-    stopAudio();
-    setIsLoading(true);
-    setLoadingStep('Updating script based on feedback...');
-    setActiveAction('none');
-
-    try {
-      const result = await refineTvCommercial(businessName, businessType, script, refinePrompt);
-      
-      setLoadingStep('Recording new voiceover...');
-      setScript(result.script);
-      setVisualHeadline(result.visualHeadline);
-      setAudioData(result.audioBase64);
-      // For refinement, we usually get a new AI image unless we handle screenshot persistence, 
-      // but for simplicity we allow the AI to generate a scene matching the new context.
-      if (result.imageBase64) {
-        setImageData(result.imageBase64);
-        setIsScreenshot(false); // Refined images are AI generated
-      }
-      
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      setRefinePrompt(''); // Clear prompt
-      setTimeout(() => playAudio(result.audioBase64), 500);
-
-    } catch (error: any) {
-      console.error(error);
-      alert(`Could not refine the video: ${error.message}`);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleLeadSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!leadEmail || !leadName || !leadPhone) return;
-    
-    setIsSubmittingLead(true);
-    
-    // Explicitly construct payload to ensure all state is captured
-    const payload = {
-      name: leadName,
-      email: leadEmail,
-      phone: leadPhone,
-      businessName,
-      businessType,
-      offer,
-      extraInfo,
-      qrType,
-      qrValue,
-      script
-    };
-
-    try {
-      const success = await submitLead(payload);
-      
-      if (success) {
-        setEmailSent(true);
-        setTimeout(() => {
-          setActiveAction('none');
-          setEmailSent(false); // Reset for future
-          setLeadName('');
-          setLeadEmail('');
-          setLeadPhone('');
-        }, 3000);
-      } else {
-        // Fallback alert if the service returns false (e.g. bad URL)
-        alert("The system could not send your data. Please check your internet connection.");
-      }
-    } catch (error) {
-      console.error(error);
-      alert("There was an issue sending your info. Please try again.");
-    } finally {
-      setIsSubmittingLead(false);
-    }
-  };
-
-  const decodeAudioData = async (base64String: string, ctx: AudioContext) => {
-    const binaryString = atob(base64String);
-    const len = binaryString.length;
-    const bytes = new Uint8Array(len);
-    for (let i = 0; i < len; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
-    }
-    
-    // Convert 16-bit PCM (Gemini output) to Float32
-    const int16View = new Int16Array(bytes.buffer);
-    const float32Data = new Float32Array(int16View.length);
-    for (let i = 0; i < int16View.length; i++) {
-        float32Data[i] = int16View[i] / 32768.0;
-    }
-
-    // Gemini TTS is typically 24kHz mono
-    const audioBuffer = ctx.createBuffer(1, float32Data.length, 24000);
-    audioBuffer.getChannelData(0).set(float32Data);
-    
-    return audioBuffer;
+  const decodeAudioData = async (b64: string, ctx: AudioContext) => {
+    const bytes = new Uint8Array(atob(b64).split("").map(c => c.charCodeAt(0)));
+    const int16 = new Int16Array(bytes.buffer);
+    const float32 = new Float32Array(int16.length);
+    for (let i = 0; i < int16.length; i++) float32[i] = int16[i] / 32768.0;
+    const buffer = ctx.createBuffer(1, float32.length, 24000);
+    buffer.getChannelData(0).set(float32);
+    return buffer;
   };
 
   const playAudio = async (b64: string | null) => {
     if (!b64) return;
-    
+    stopAudio();
     try {
-      stopAudio();
-
-      if (!audioContextRef.current) {
-        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-      }
-
-      if (audioContextRef.current.state === 'suspended') {
-        await audioContextRef.current.resume();
-      }
-
+      if (!audioContextRef.current) audioContextRef.current = new AudioContext();
       const ctx = audioContextRef.current;
-      const voiceBuffer = await decodeAudioData(b64, ctx);
+      if (ctx.state === 'suspended') await ctx.resume();
       
-      // 1. Setup Voice
-      const voiceSource = ctx.createBufferSource();
-      voiceSource.buffer = voiceBuffer;
-      // Boost voice slightly
-      const voiceGain = ctx.createGain();
-      voiceGain.gain.value = 1.2;
-      voiceSource.connect(voiceGain);
-      voiceGain.connect(ctx.destination);
+      const vBuffer = await decodeAudioData(b64, ctx);
+      const vSource = ctx.createBufferSource();
+      vSource.buffer = vBuffer;
+      vSource.connect(ctx.destination);
+      voiceNodeRef.current = vSource;
       
-      voiceNodeRef.current = voiceSource;
-
-      // 2. Setup Background Music
       if (musicBufferRef.current) {
-        const musicSource = ctx.createBufferSource();
-        musicSource.buffer = musicBufferRef.current;
-        musicSource.loop = true;
-        
-        const musicGain = ctx.createGain();
-        musicGain.gain.value = 0.1; // Background level
-        
-        musicSource.connect(musicGain);
-        musicGain.connect(ctx.destination);
-        
-        musicNodeRef.current = musicSource;
-        musicGainNodeRef.current = musicGain;
-        musicSource.start(0);
+        const mSource = ctx.createBufferSource();
+        mSource.buffer = musicBufferRef.current;
+        mSource.loop = true;
+        const mGain = ctx.createGain();
+        mGain.gain.value = 0.05;
+        mSource.connect(mGain).connect(ctx.destination);
+        musicNodeRef.current = mSource;
+        mSource.start(0);
       }
-
-      // 3. Handle End - EXTENDED FOR 5 SECONDS
-      voiceSource.onended = () => {
-        // Voice is done, but we keep playing music and visuals for 5 seconds
-        // to allow for Call To Action
-        
-        if (musicGainNodeRef.current) {
-          // Schedule fade out to happen at end of the 5s window
-          const fadeStartTime = ctx.currentTime + 3.5; // Start fading after 3.5s
-          const stopTime = ctx.currentTime + 5.0;      // Stop completely at 5s
-          
-          // Maintain volume for a bit
-          musicGainNodeRef.current.gain.setValueAtTime(0.1, fadeStartTime);
-          // Exponential fade to near zero
-          musicGainNodeRef.current.gain.exponentialRampToValueAtTime(0.001, stopTime);
-
-          setTimeout(() => {
-             stopAudio(); // This sets isPlaying(false)
-          }, 5000);
-        } else {
-            // If no music, still wait 5s to stop visuals
-            setTimeout(() => {
-                stopAudio();
-            }, 5000);
-        }
-      };
       
-      voiceSource.start(0);
+      vSource.start(0);
       setIsPlaying(true);
+      vSource.onended = () => setIsPlaying(false);
     } catch (e) {
-      console.error("Audio playback error:", e);
-      setIsPlaying(false);
+      console.error("Audio playback error", e);
     }
   };
 
   const stopAudio = () => {
     if (voiceNodeRef.current) {
-      try { voiceNodeRef.current.stop(); } catch (e) {}
+      try { voiceNodeRef.current.stop(); } catch(e){}
       voiceNodeRef.current = null;
     }
     if (musicNodeRef.current) {
-      try { musicNodeRef.current.stop(); } catch (e) {}
+      try { musicNodeRef.current.stop(); } catch(e){}
       musicNodeRef.current = null;
     }
     setIsPlaying(false);
   };
 
-  const togglePlayback = () => {
-    if (isPlaying) {
-      stopAudio();
-    } else {
-      playAudio(audioData);
-    }
-  };
-
   return (
-    <section id="generator" className="py-24 bg-white text-brand-dark relative overflow-hidden border-t border-gray-100">
-      {/* CSS Animations */}
+    <section id="generator" className="py-12 md:py-24 bg-brand-surface relative overflow-hidden selection:bg-brand-primary">
       <style>{`
-        @keyframes kenBurns {
-          0% { transform: scale(1.0) translate(0, 0); }
-          50% { transform: scale(1.15) translate(-2%, -1%); }
-          100% { transform: scale(1.0) translate(0, 0); }
+        @keyframes kenBurns { 
+          0% { transform: scale(1); } 
+          100% { transform: scale(1.1); } 
         }
-        .animate-ken-burns {
-          animation: kenBurns 20s ease-in-out infinite alternate;
+        .animate-ken-burns { animation: kenBurns 45s ease-in-out infinite alternate; }
+        .tv-frame-shadow { 
+          box-shadow: 0 0 120px rgba(0,0,0,0.85), inset 0 0 100px rgba(0,0,0,0.9); 
         }
-        
-        @keyframes scrollVertical {
-          0% { transform: translateY(0); }
-          100% { transform: translateY(-30%); }
-        }
-        .animate-scroll-vertical {
-          animation: scrollVertical 15s ease-in-out infinite alternate;
+        .crt-scanlines {
+          pointer-events: none;
+          background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%), 
+                      linear-gradient(90deg, rgba(255, 0, 0, 0.02), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.02));
+          background-size: 100% 3px, 3px 100%;
+          z-index: 10;
         }
       `}</style>
       
-      {/* Top Gradient Separator */}
-      <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-brand-primary/20 to-transparent"></div>
-
-      {/* Background Shapes */}
-      <div className="absolute top-0 right-0 w-[800px] h-[800px] bg-brand-primary/5 rounded-full blur-[120px] -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
-      <div className="absolute bottom-0 left-0 w-[600px] h-[600px] bg-blue-100/40 rounded-full blur-[100px] translate-y-1/2 -translate-x-1/2 pointer-events-none"></div>
-      
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-        
-        {/* Header */}
-        <div className="text-center mb-16">
-           <div className="inline-flex items-center space-x-2 bg-brand-primary/10 border border-brand-primary/20 rounded-full px-4 py-1.5 mb-6">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-primary opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-brand-primary"></span>
-              </span>
-              <span className="text-brand-dark font-bold text-xs uppercase tracking-widest">
-                AI Commercial Preview
-              </span>
-           </div>
-           <h2 className="text-4xl md:text-5xl font-black tracking-tight mb-4 text-brand-dark">
-             Visualize Your TV Campaign.
-           </h2>
-           <p className="text-gray-600 max-w-2xl mx-auto text-lg">
-             Enter your business details to generate a preview script, voiceover, and visual concept. No production team required.
-           </p>
+        <div className="text-center mb-10 md:mb-16">
+          <div className="inline-flex items-center space-x-2 bg-brand-dark text-brand-primary px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest mb-4">
+            <ShieldCheck className="w-3 h-3" />
+            <span>AI Local Fame Simulator</span>
+          </div>
+          <h2 className="text-3xl md:text-6xl font-black text-brand-dark mb-4 tracking-tighter uppercase underline decoration-brand-primary decoration-4 underline-offset-8">Preview Your TV Presence</h2>
+          <p className="text-gray-500 max-w-xl mx-auto font-light mt-4 px-4 text-sm md:text-base">We pay for your first 1,000 neighborhood spots. Enter your business details to launch your broadcast simulation.</p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
-          
-          {/* Form Side */}
-          <div className={`lg:col-span-5 transition-all duration-500 ${view === 'simulator' ? 'hidden lg:block lg:opacity-30 blur-[1px] hover:blur-0 hover:opacity-100' : 'opacity-100'}`}>
-            <form onSubmit={handleGenerate} className="space-y-5 bg-white p-8 rounded-3xl border border-gray-100 shadow-2xl relative overflow-hidden">
-              
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider mb-2 text-gray-700">Business Name</label>
-                <input 
-                  type="text" 
-                  value={businessName}
-                  onChange={(e) => setBusinessName(e.target.value)}
-                  placeholder="e.g. Joe's Pizza"
-                  className="w-full px-5 py-4 rounded-xl bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-transparent transition-all focus:bg-white"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider mb-2 text-gray-700">Business Type</label>
-                <input 
-                  type="text" 
-                  value={businessType}
-                  onChange={(e) => setBusinessType(e.target.value)}
-                  placeholder="e.g. Italian Restaurant"
-                  className="w-full px-5 py-4 rounded-xl bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-transparent transition-all focus:bg-white"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider mb-2 text-gray-700">Core Offer</label>
-                <input 
-                  type="text" 
-                  value={offer}
-                  onChange={(e) => setOffer(e.target.value)}
-                  placeholder="e.g. Free appetizer with large pizza"
-                  className="w-full px-5 py-4 rounded-xl bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-transparent transition-all focus:bg-white"
-                  required
-                />
-              </div>
-
-              {/* QR Action Selection */}
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider mb-2 text-gray-700">
-                  QR Destination <span className="text-gray-400 font-normal lowercase">(Optional)</span>
-                </label>
-                <div className="flex rounded-xl bg-gray-50 border border-gray-200 overflow-hidden focus-within:ring-2 focus-within:ring-brand-primary focus-within:border-transparent transition-all">
-                  <div className="relative border-r border-gray-200 bg-gray-100">
-                      <select
-                          value={qrType}
-                          onChange={(e) => setQrType(e.target.value as any)}
-                          className="h-full pl-3 pr-8 py-4 bg-transparent text-gray-700 text-sm font-bold focus:outline-none cursor-pointer appearance-none"
-                      >
-                          <option value="url">Website</option>
-                          <option value="tel">Call</option>
-                          <option value="sms">SMS</option>
-                      </select>
-                      {/* Custom dropdown arrow */}
-                      <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-500">
-                        <svg className="h-4 w-4 fill-current" viewBox="0 0 20 20"><path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" fillRule="evenodd"></path></svg>
-                      </div>
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-start">
+          {/* Form Controls */}
+          <div className={`lg:col-span-5 order-2 lg:order-1 space-y-6 transition-all duration-500 ${view === 'simulator' ? 'hidden lg:block lg:opacity-20 pointer-events-none' : ''}`}>
+            <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-2xl border border-gray-100 space-y-6">
+              <div className="space-y-4">
+                <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 block">Step 1: Link Neighborhood Listing</label>
+                <div className="flex flex-col gap-2">
+                  <div className="relative">
+                    <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input 
+                      type="text" value={searchQuery} 
+                      onChange={(e) => { setSearchQuery(e.target.value); setSelectedBusiness(null); }} 
+                      placeholder="Business Name..."
+                      className="w-full pl-10 pr-4 py-4 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-brand-primary outline-none text-sm"
+                    />
+                    {isSearching && <Loader2 className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-brand-primary" />}
                   </div>
                   <input 
-                    type={qrType === 'url' ? 'text' : 'tel'}
-                    value={qrValue}
-                    onChange={(e) => setQrValue(e.target.value)}
-                    placeholder={
-                        qrType === 'url' ? 'e.g. easytvoffers.com' : 
-                        qrType === 'tel' ? 'e.g. 555-0199' : 'e.g. 555-0199'
-                    }
-                    className="flex-1 px-5 py-4 bg-transparent text-gray-900 placeholder-gray-400 focus:outline-none"
+                    type="text" value={cityQuery} 
+                    onChange={(e) => setCityQuery(e.target.value)} 
+                    placeholder="City" 
+                    className="w-full px-4 py-4 bg-gray-50 border border-gray-100 rounded-xl font-bold text-center text-sm"
                   />
                 </div>
-                <p className="text-[10px] text-gray-400 mt-2 pl-1 flex items-center">
-                  <Globe className="w-3 h-3 mr-1" /> If URL is provided, we'll feature it on screen!
-                </p>
+                {businessCandidates.length > 0 && !selectedBusiness && (
+                  <div className="bg-white border border-gray-100 rounded-xl shadow-2xl overflow-hidden animate-fade-in ring-4 ring-brand-primary/10 max-h-48 overflow-y-auto">
+                    {businessCandidates.map((c, i) => (
+                      <button key={i} onClick={() => { setSelectedBusiness(c); setSearchQuery(c.name); setBusinessCandidates([]); }} className="w-full text-left p-4 hover:bg-brand-primary/5 border-b last:border-0 transition-colors">
+                        <p className="font-bold text-brand-dark uppercase tracking-tight text-xs">{c.name}</p>
+                        <p className="text-[10px] text-gray-400 truncate">{c.address}</p>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {selectedBusiness && (
+                  <div className="flex items-center justify-between bg-emerald-50 p-4 rounded-xl border border-emerald-100">
+                    <div className="flex items-center">
+                      <Check className="w-4 h-4 text-emerald-600 mr-2" />
+                      <span className="text-[10px] font-black text-emerald-700 uppercase tracking-widest">Listing Sync'd</span>
+                    </div>
+                    <button onClick={() => setSelectedBusiness(null)} className="p-1 hover:bg-white rounded-full transition-colors"><X className="w-4 h-4 text-emerald-300" /></button>
+                  </div>
+                )}
               </div>
 
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider mb-2 text-gray-700">Additional Info (Optional)</label>
-                <textarea 
-                  value={extraInfo}
-                  onChange={(e) => setExtraInfo(e.target.value)}
-                  placeholder="e.g. Family owned since 1985, located downtown..."
-                  rows={2}
-                  className="w-full px-5 py-4 rounded-xl bg-gray-50 border border-gray-200 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-primary focus:border-transparent transition-all focus:bg-white resize-none"
+              <div className="space-y-4">
+                <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 block">Step 2: Neighborhood Offer</label>
+                <input 
+                  type="text" value={offer} 
+                  onChange={(e) => setOffer(e.target.value)} 
+                  placeholder="e.g. 50% Off First Visit"
+                  className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-brand-primary outline-none font-medium text-sm"
                 />
               </div>
+
               <button 
-                type="submit" 
-                disabled={isLoading}
-                className="w-full py-4 mt-2 bg-brand-primary text-brand-dark font-bold rounded-xl hover:bg-brand-dark hover:text-white transition-all flex items-center justify-center text-lg disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(0,196,180,0.3)] hover:shadow-[0_0_30px_rgba(0,196,180,0.5)] transform hover:-translate-y-0.5"
+                onClick={handleGenerate} 
+                disabled={isLoading || !selectedBusiness}
+                className="w-full py-5 bg-brand-primary text-brand-dark font-black rounded-xl shadow-xl hover:shadow-brand-primary/20 transform hover:-translate-y-1 transition-all disabled:opacity-30 flex items-center justify-center text-lg uppercase tracking-tight"
               >
-                <Wand2 className="w-5 h-5 mr-3" />
-                Generate Preview
+                {isLoading ? <Loader2 className="w-5 h-5 animate-spin mr-3" /> : <Wand2 className="w-5 h-5 mr-3" />}
+                {isLoading ? loadingStep : "Generate My TV Simulation"}
               </button>
-            </form>
+            </div>
           </div>
 
-          {/* Simulator Side */}
-          <div className="lg:col-span-7 relative flex justify-center perspective-1000">
-             {view === 'form' ? (
-                // Placeholder State
-                <div className="w-full aspect-video bg-gray-50 rounded-3xl border border-gray-200 flex flex-col items-center justify-center text-gray-500 p-8 text-center relative overflow-hidden group shadow-inner">
-                   <div className="absolute inset-0 bg-gradient-to-tr from-transparent via-white/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700"></div>
-                   <Radio className="w-24 h-24 mb-6 opacity-20 text-brand-dark" />
-                   <h3 className="text-2xl font-bold mb-2 text-brand-dark">Ready to Preview</h3>
-                   <p className="max-w-xs text-gray-500">Enter your info to generate your preview.</p>
-                   {isLoading && (
-                    <div className="absolute inset-0 bg-white/95 z-50 flex flex-col items-center justify-center">
-                        <Loader2 className="w-16 h-16 text-brand-primary animate-spin mb-6" />
-                        <p className="text-xl font-bold text-brand-dark animate-pulse">{loadingStep}</p>
+          {/* TV Simulator Column */}
+          <div className="lg:col-span-7 order-1 lg:order-2 relative">
+            {isLoading && (
+              <div className="absolute inset-0 z-[60] bg-white/95 rounded-[2rem] md:rounded-[2.5rem] flex flex-col items-center justify-center text-center p-6 md:p-12">
+                <Loader2 className="w-12 h-12 text-brand-primary animate-spin mb-6" />
+                <h3 className="text-xl md:text-2xl font-black text-brand-dark uppercase tracking-tighter mb-2">{loadingStep}</h3>
+                <p className="text-gray-400 text-xs md:text-sm max-w-xs">Connecting to local broadcast servers. Generating neighborhood visual assets.</p>
+              </div>
+            )}
+
+            {view === 'form' ? (
+              <div className="w-full aspect-video bg-gray-900 rounded-[2rem] md:rounded-[2.5rem] border-4 border-white shadow-2xl flex flex-col items-center justify-center text-gray-600 p-8 text-center overflow-hidden relative">
+                <Tv className="w-12 h-12 md:w-20 md:h-20 mb-6 opacity-5 animate-pulse" />
+                <h3 className="text-base md:text-xl font-black text-white opacity-10 uppercase tracking-tighter">Broadcast Stream Offline</h3>
+                <p className="text-xs font-light mt-2 max-w-xs opacity-20">Link your verified business profile to activate the Local Fame simulator.</p>
+                <div className="absolute inset-0 crt-scanlines opacity-10"></div>
+              </div>
+            ) : (
+              <div className="space-y-6 md:space-y-8 animate-fade-in-up">
+                {/* TV SIMULATOR CONTAINER */}
+                <div className="relative bg-black rounded-[2rem] md:rounded-[2.5rem] p-2 md:p-4 shadow-2xl tv-frame-shadow overflow-hidden group">
+                  <div className="relative aspect-video rounded-xl md:rounded-2xl overflow-hidden bg-black">
+                    {/* Background Visual */}
+                    <div className="absolute inset-0">
+                      {imageData ? (
+                        <img 
+                          src={`data:image/png;base64,${imageData}`} 
+                          className="w-full h-full object-cover object-center opacity-85 animate-ken-burns" 
+                          alt="TV Background" 
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-gradient-to-br from-gray-900 to-black" />
+                      )}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-black/20" />
+                      <div className="absolute inset-0 crt-scanlines opacity-40"></div>
                     </div>
-                   )}
-                </div>
-             ) : (
-                // Active Simulator State
-                <div className="w-full flex flex-col gap-8 animate-fade-in-up">
-                    <div className="relative w-full shadow-2xl">
-                        
-                        {/* Global Loading Overlay for Refinements */}
-                        {isLoading && (
-                            <div className="absolute inset-0 bg-white/90 z-50 flex flex-col items-center justify-center rounded-[2rem] backdrop-blur-sm border border-brand-primary/20">
-                                <Loader2 className="w-12 h-12 text-brand-primary animate-spin mb-4" />
-                                <p className="text-brand-dark font-bold tracking-wide animate-pulse">{loadingStep}</p>
-                            </div>
-                        )}
 
-                        {/* TV Bezel (Remains Dark for Realism) */}
-                        <div className="relative bg-gray-900 rounded-[2rem] p-4 shadow-[0_20px_50px_rgba(0,0,0,0.3)] border border-gray-800 ring-1 ring-white/10">
-                            
-                            {/* Screen Content */}
-                            <div className="relative aspect-video bg-black rounded-xl overflow-hidden flex flex-col items-center justify-center border border-white/5 group">
-                                
-                                {/* Generated Background Image with Motion */}
-                                {imageData ? (
-                                    <div className="absolute inset-0 overflow-hidden">
-                                        <img 
-                                            src={`data:image/jpeg;base64,${imageData}`} 
-                                            alt="Commercial Background"
-                                            className={`w-full h-full object-cover opacity-60 filter blur-[2px] ${isScreenshot ? 'animate-scroll-vertical' : 'animate-ken-burns'}`}
-                                        />
-                                    </div>
-                                ) : (
-                                    <div className="absolute inset-0 bg-gradient-to-br from-gray-800 to-gray-900 opacity-80" />
-                                )}
-                                
-                                {/* Dark Overlay for readability */}
-                                <div className="absolute inset-0 bg-black/30"></div>
-
-                                {/* Main Content Layout */}
-                                <div className="relative z-10 flex flex-row items-center justify-between w-full px-8 md:px-12 h-full gap-8">
-                                    
-                                    {/* Left Side: Text Offer */}
-                                    <div className="flex-1 text-left space-y-4">
-                                        <div className="inline-block bg-brand-primary text-brand-dark font-black px-3 py-1 text-xs uppercase tracking-widest rounded mb-2 shadow-lg">
-                                            Local TV Spotlight
-                                        </div>
-                                        <h1 className="text-3xl md:text-4xl lg:text-5xl font-black text-white leading-tight drop-shadow-[0_2px_10px_rgba(0,0,0,0.8)]">
-                                            {visualHeadline || offer}
-                                        </h1>
-                                        <p className="text-xl text-white font-bold tracking-wide drop-shadow-md">
-                                            at {businessName}
-                                        </p>
-                                    </div>
-
-                                    {/* Right Side: QR Code */}
-                                    <div className="flex-shrink-0 flex flex-col items-center justify-center">
-                                        <div className="relative bg-white p-3 rounded-2xl shadow-[0_0_30px_rgba(0,0,0,0.5)] transform transition-transform duration-300 group-hover:scale-105">
-                                            {qrCodeUrl ? (
-                                                <img 
-                                                  src={qrCodeUrl} 
-                                                  alt="Offer QR Code" 
-                                                  className="w-32 h-32 md:w-40 md:h-40" 
-                                                />
-                                            ) : (
-                                                <div className="w-32 h-32 md:w-40 md:h-40 bg-gray-200 flex items-center justify-center">
-                                                   <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
-                                                </div>
-                                            )}
-                                            <div className="absolute -bottom-3 -right-3 bg-brand-primary text-brand-dark text-[10px] font-bold px-2 py-1 rounded-full shadow-lg border border-white">
-                                                SCAN ME
-                                            </div>
-                                        </div>
-                                        <p className="mt-4 text-brand-primary font-black uppercase tracking-[0.2em] text-sm animate-pulse drop-shadow-md">
-                                            Scan Now
-                                        </p>
-                                    </div>
-                                </div>
-
-                                {/* Bottom Bar / Playback Controls */}
-                                <div className="absolute bottom-0 w-full bg-black/60 backdrop-blur-md border-t border-white/10 p-4 flex items-center justify-between z-20">
-                                    <div className="flex items-center space-x-4">
-                                        <button 
-                                            onClick={togglePlayback}
-                                            className="w-10 h-10 rounded-full bg-brand-primary text-brand-dark flex items-center justify-center hover:bg-white transition-colors shadow-lg"
-                                        >
-                                            {isPlaying ? <Square className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current ml-0.5" />}
-                                        </button>
-                                        
-                                        {/* Simulated Audio Visualizer */}
-                                        <div className="flex space-x-1 h-6 items-end">
-                                            {[...Array(10)].map((_, i) => (
-                                                <div 
-                                                    key={i} 
-                                                    className={`w-1 bg-brand-primary rounded-t-sm transition-all duration-150 ${isPlaying ? 'animate-music-bar' : 'h-1 opacity-30'}`}
-                                                    style={{ 
-                                                        height: isPlaying ? `${Math.random() * 100}%` : '4px',
-                                                        animationDelay: `${i * 0.05}s`
-                                                    }}
-                                                ></div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                    
-                                    <div className="flex items-center space-x-3 text-xs font-mono text-gray-400">
-                                        <div className="flex items-center">
-                                          <Music className="w-3 h-3 mr-1" />
-                                          <span className="hidden sm:inline">MUSIC</span>
-                                        </div>
-                                        <div className="w-px h-3 bg-gray-600"></div>
-                                        <div className="flex items-center">
-                                          <Volume2 className="w-3 h-3 mr-1" />
-                                          <span className="hidden sm:inline">AI VOICEOVER</span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* TV Brand Logo */}
-                            <div className="absolute bottom-1.5 left-1/2 transform -translate-x-1/2">
-                               <div className="text-[10px] font-bold text-gray-600 tracking-widest uppercase">Sony</div>
-                            </div>
+                    {/* OVERLAYS - REFINED FOR TRANSPARENCY & SPACING */}
+                    <div className="absolute inset-0 p-[5%] md:p-[6%] flex flex-col justify-between z-[20] pointer-events-none">
+                      {/* Top Bar Tags */}
+                      <div className="flex justify-between items-start w-full mb-2 md:mb-12">
+                        <div className="bg-red-600/20 backdrop-blur-sm px-2 md:px-3 py-0.5 md:py-1 rounded-sm text-[7px] md:text-[10px] font-black text-white flex items-center shadow-lg uppercase tracking-widest border border-white/10">
+                          <span className="w-1.5 h-1.5 bg-white rounded-full mr-1.5 animate-pulse" />
+                          Local Feed Live
                         </div>
-
-                        {/* Reflection/Shadow */}
-                        <div className="absolute -bottom-4 left-4 right-4 h-4 bg-black/20 blur-xl rounded-[50%]"></div>
-                    </div>
-
-                    {/* ACTION BAR: 3 BUTTONS */}
-                    <div className="flex flex-col gap-4">
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        
-                        {/* Refine Button */}
-                        <button
-                          onClick={() => setActiveAction(activeAction === 'refine' ? 'none' : 'refine')}
-                          className={`flex items-center justify-center px-6 py-4 rounded-xl border-2 font-bold transition-all duration-300 ${activeAction === 'refine' ? 'bg-brand-surface text-brand-dark border-brand-primary' : 'border-gray-200 text-gray-600 hover:border-brand-primary hover:text-brand-primary hover:bg-white'}`}
-                        >
-                           <RefreshCw className={`w-5 h-5 mr-2 ${activeAction === 'refine' ? 'animate-spin-slow' : ''}`} />
-                           Refine Video
-                        </button>
-
-                         {/* Download/Lead Gen Button */}
-                        <button
-                          onClick={() => setActiveAction(activeAction === 'email' ? 'none' : 'email')}
-                          className={`flex items-center justify-center px-6 py-4 rounded-xl border-2 font-bold transition-all duration-300 ${activeAction === 'email' ? 'bg-brand-surface text-brand-dark border-brand-primary' : 'border-gray-200 text-gray-600 hover:border-brand-primary hover:text-brand-primary hover:bg-white'}`}
-                        >
-                           <Download className="w-5 h-5 mr-2" />
-                           Save & Email
-                        </button>
-
-                         {/* Book Call Button (Primary) */}
-                        <a
-                          href="https://tidycal.com/tv/amkhan"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center justify-center px-6 py-4 rounded-xl bg-brand-primary text-brand-dark font-black shadow-[0_0_20px_rgba(0,196,180,0.3)] hover:shadow-[0_0_30px_rgba(0,196,180,0.5)] transform hover:-translate-y-1 transition-all"
-                        >
-                           Book Strategy
-                           <ArrowRight className="w-5 h-5 ml-2" />
-                        </a>
+                        <div className="text-white/20 text-[6px] md:text-[9px] font-mono tracking-widest uppercase">
+                          Saturation v4.1
+                        </div>
                       </div>
 
-                      {/* CONDITIONAL INPUT: REFINEMENT */}
-                      {activeAction === 'refine' && (
-                        <form onSubmit={handleRefine} className="animate-fade-in-up bg-gray-50 border border-gray-200 rounded-2xl p-6 shadow-lg">
-                           <label className="block text-sm font-bold text-gray-700 mb-2">What should we change?</label>
-                           <div className="flex flex-col md:flex-row gap-3">
-                              <input 
-                                type="text"
-                                value={refinePrompt}
-                                onChange={(e) => setRefinePrompt(e.target.value)}
-                                placeholder="e.g. Make it funnier, mention we are open late, use a different headline..."
-                                className="flex-1 bg-white border border-gray-300 rounded-lg px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                                autoFocus
-                              />
-                              <button 
-                                type="submit" 
-                                disabled={!refinePrompt || isLoading}
-                                className="bg-brand-dark text-white font-bold px-6 py-3 rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                              >
-                                Update Video
-                              </button>
-                           </div>
-                        </form>
-                      )}
-
-                      {/* CONDITIONAL INPUT: EMAIL CAPTURE */}
-                      {activeAction === 'email' && (
-                        <div className="animate-fade-in-up bg-gray-50 border border-gray-200 rounded-2xl p-6 shadow-lg text-center">
-                           {emailSent ? (
-                             <div className="flex flex-col items-center justify-center py-4 text-green-600">
-                                <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mb-3">
-                                  <Check className="w-6 h-6" />
-                                </div>
-                                <h4 className="text-xl font-bold">Sent!</h4>
-                                <p className="text-gray-600 text-sm">Check your inbox. We'll be in touch shortly.</p>
-                             </div>
-                           ) : (
-                             <form onSubmit={handleLeadSubmit} className="max-w-xl mx-auto text-left">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                                  <div>
-                                    <label className="block text-xs font-bold text-gray-500 mb-1">Name</label>
-                                    <div className="relative">
-                                      <User className="absolute left-3 top-3.5 w-4 h-4 text-gray-400" />
-                                      <input 
-                                        type="text"
-                                        value={leadName}
-                                        onChange={(e) => setLeadName(e.target.value)}
-                                        className="w-full bg-white border border-gray-300 rounded-lg pl-9 pr-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                                        required
-                                        placeholder="John Doe"
-                                      />
-                                    </div>
-                                  </div>
-                                  <div>
-                                    <label className="block text-xs font-bold text-gray-500 mb-1">Phone</label>
-                                    <div className="relative">
-                                      <Phone className="absolute left-3 top-3.5 w-4 h-4 text-gray-400" />
-                                      <input 
-                                        type="tel"
-                                        value={leadPhone}
-                                        onChange={(e) => setLeadPhone(e.target.value)}
-                                        className="w-full bg-white border border-gray-300 rounded-lg pl-9 pr-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                                        required
-                                        placeholder="(555) 123-4567"
-                                      />
-                                    </div>
-                                  </div>
-                                </div>
-                                
-                                <div className="mb-4">
-                                  <label className="block text-xs font-bold text-gray-500 mb-1">Email</label>
-                                  <div className="relative">
-                                    <Mail className="absolute left-3 top-3.5 w-4 h-4 text-gray-400" />
-                                    <input 
-                                      type="email"
-                                      value={leadEmail}
-                                      onChange={(e) => setLeadEmail(e.target.value)}
-                                      className="w-full bg-white border border-gray-300 rounded-lg pl-9 pr-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-primary"
-                                      required
-                                      placeholder="john@example.com"
-                                    />
-                                  </div>
-                                </div>
-
-                                <button 
-                                  type="submit" 
-                                  disabled={isSubmittingLead}
-                                  className="w-full bg-brand-primary text-brand-dark font-bold px-6 py-3 rounded-lg hover:bg-brand-dark hover:text-white transition-colors disabled:opacity-50"
-                                >
-                                  {isSubmittingLead ? 'Sending...' : 'Send Video & Pricing'}
-                                </button>
-                                <p className="text-xs text-center text-gray-500 mt-4">We'll send your video preview and pricing details ($99/mo per ZIP).</p>
-                             </form>
-                           )}
+                      {/* Center Content */}
+                      <div className="flex-1 flex flex-col md:flex-row items-start md:items-center justify-center md:justify-between w-full py-4 relative">
+                        {/* Headline Box */}
+                        <div className="bg-brand-primary/10 backdrop-blur-md text-white px-4 md:px-8 py-4 md:py-6 rounded-lg md:rounded-2xl shadow-[0_15px_60px_rgba(0,0,0,0.3)] border md:border-2 border-white/10 max-w-[85%] md:max-w-[70%] text-left">
+                          <h1 className="text-sm md:text-3xl lg:text-4xl font-black uppercase tracking-tight leading-tight m-0 drop-shadow-[0_2px_8px_rgba(0,0,0,1)]">
+                            {visualHeadline}
+                          </h1>
                         </div>
-                      )}
+
+                        {/* QR Code */}
+                        <div className="flex flex-col items-center absolute top-[-5%] sm:top-[0%] right-[0%] md:right-[2%]">
+                          <div className="bg-white/40 backdrop-blur-sm p-1 md:p-1.5 rounded-lg md:rounded-2xl shadow-2xl ring-1 md:ring-2 ring-brand-primary/10 transition-transform duration-300 hover:scale-105">
+                            {qrCodeUrl && <img src={qrCodeUrl} className="w-10 h-10 sm:w-16 sm:h-16 md:w-24 md:h-24 lg:w-28 lg:h-28" alt="Scan Map" />}
+                          </div>
+                          <p className="mt-1 md:mt-2 text-[5px] md:text-[8px] font-black text-brand-primary uppercase tracking-[0.2em] md:tracking-[0.3em] drop-shadow-md">Maps Scan</p>
+                        </div>
+                      </div>
+
+                      {/* Bottom Info Bar - ALIGNED HIGHER UP FOR VISIBILITY */}
+                      <div className="flex justify-start items-end w-full mt-2 md:mt-4 mb-4 md:mb-12">
+                        <div className="bg-brand-dark/15 backdrop-blur-xl px-4 md:px-6 py-3 md:py-4 rounded-xl md:rounded-2xl border border-white/5 shadow-2xl flex items-center w-full md:w-auto md:max-w-full">
+                          <div className="bg-brand-primary/50 backdrop-blur-sm p-2 md:p-3 rounded-lg md:rounded-xl mr-3 md:mr-5 shadow-xl shrink-0">
+                            <Phone className="w-4 h-4 md:w-5 md:h-5 text-brand-dark fill-current" />
+                          </div>
+                          <div className="flex flex-col min-w-0 pr-2">
+                            <span className="text-brand-primary text-[5px] md:text-[8px] font-black uppercase tracking-[0.3em] mb-1 leading-none drop-shadow">Response Line</span>
+                            <span className="text-white text-base md:text-lg lg:text-xl font-black tracking-normal tabular-nums leading-none drop-shadow-[0_2px_10px_rgba(0,0,0,1)] whitespace-nowrap overflow-hidden">
+                              {selectedBusiness?.phoneNumber || '1-800-TV-LOCAL'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
                     </div>
+
+                    {/* Media Controls Layer */}
+                    <div className="absolute bottom-0 w-full p-3 bg-black/40 backdrop-blur-md border-t border-white/10 flex items-center justify-between opacity-0 group-hover:opacity-100 transition-opacity z-[30]">
+                      <button onClick={isPlaying ? stopAudio : () => playAudio(audioData)} className="p-2 md:p-3 bg-brand-primary rounded-full text-brand-dark shadow-xl hover:scale-110 active:scale-95 transition-all">
+                        {isPlaying ? <Square className="w-3 h-3 md:w-4 md:h-4 fill-current" /> : <Play className="w-3 h-3 md:w-4 md:h-4 fill-current ml-0.5" />}
+                      </button>
+                      <div className="text-[7px] md:text-[10px] font-mono text-white/50 font-black uppercase tracking-[0.2em] px-2 truncate">
+                        Neighborhood Simulation // Active Reach
+                      </div>
+                    </div>
+                  </div>
                 </div>
-             )}
+
+                {/* PACKAGE SELECTION BLOCK */}
+                <div className="bg-white p-6 md:p-10 rounded-[2.5rem] shadow-2xl border border-gray-100 space-y-8 relative">
+                  <div className="flex flex-col md:flex-row justify-between items-center gap-6 border-b pb-8">
+                    <div className="text-center md:text-left">
+                      <div className="inline-flex items-center space-x-1 text-emerald-600 font-black text-[9px] uppercase tracking-widest mb-1">
+                        <Check className="w-3 h-3" />
+                        <span>Optimized For Local Growth</span>
+                      </div>
+                      <h3 className="text-2xl md:text-3xl font-black text-brand-dark uppercase tracking-tight leading-none">Choose Your Reach</h3>
+                    </div>
+                    <div className="flex items-center space-x-3 bg-gray-50 p-2 md:p-3 rounded-2xl border">
+                      <button onClick={() => zipCount > 1 && setZipCount(zipCount - 1)} className="p-3 hover:bg-white rounded-xl shadow-sm transition-all"><Minus className="w-4 h-4 text-gray-400" /></button>
+                      <div className="px-4 md:px-6 text-center min-w-[70px]">
+                        <span className="text-3xl md:text-4xl font-black text-brand-dark leading-none">{zipCount}</span>
+                        <span className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mt-1">Zips</span>
+                      </div>
+                      <button onClick={() => { setZipCount(zipCount + 1); setIsTrial(false); }} className="p-3 hover:bg-white rounded-xl shadow-sm transition-all"><Plus className="w-4 h-4 text-brand-primary" /></button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div 
+                      onClick={() => { setIsTrial(true); setZipCount(1); }}
+                      className={`p-6 rounded-2xl border-2 cursor-pointer transition-all relative ${isTrial ? 'border-brand-primary bg-brand-primary/5 ring-4 md:ring-8 ring-brand-primary/5' : 'border-gray-100 bg-gray-50'}`}
+                    >
+                      <div className="flex justify-between items-start mb-3">
+                        <span className="text-[9px] font-black uppercase text-brand-primary tracking-widest bg-brand-primary/10 px-2 py-0.5 rounded">Trial Pack</span>
+                        {isTrial && <Check className="w-4 h-4 text-brand-primary" />}
+                      </div>
+                      <div className="text-3xl md:text-4xl font-black text-brand-dark mb-1">$0 <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">30-Day Trial</span></div>
+                      <p className="text-[10px] text-gray-500 font-bold uppercase leading-relaxed">Risk-free trial. Reserve neighborhood inventory today. $0 charge until day 31.</p>
+                    </div>
+                    
+                    <div 
+                      onClick={() => setIsTrial(false)}
+                      className={`p-6 rounded-2xl border-2 cursor-pointer transition-all relative ${!isTrial ? 'border-brand-primary bg-brand-primary/5 ring-4 md:ring-8 ring-brand-primary/5' : 'border-gray-100 bg-gray-50'}`}
+                    >
+                      <div className="flex justify-between items-start mb-3">
+                        <span className="text-[9px] font-black uppercase text-gray-400 tracking-widest">Dominator Pack</span>
+                        {!isTrial && <Check className="w-4 h-4 text-brand-primary" />}
+                      </div>
+                      <div className="text-3xl md:text-4xl font-black text-brand-dark mb-1">${99 * zipCount} <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">/ Mo</span></div>
+                      <p className="text-[10px] text-gray-500 font-bold uppercase leading-relaxed">1,000 spots per zip every 30 days. Priority neighborhood placement & support.</p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col md:flex-row gap-4 pt-4">
+                    <button onClick={() => setView('form')} className="flex-1 py-4 md:py-5 rounded-xl border-2 border-gray-100 font-black text-gray-400 hover:text-brand-dark transition-all flex items-center justify-center text-sm uppercase">
+                      <RefreshCw className="w-4 h-4 mr-3" /> Restart
+                    </button>
+                    <button className="flex-[2] py-4 md:py-5 bg-brand-primary text-brand-dark font-black text-xl md:text-2xl rounded-xl shadow-2xl hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center group overflow-hidden relative uppercase">
+                      <div className="absolute inset-0 bg-white/20 -translate-x-full group-hover:translate-x-full transition-transform duration-700"></div>
+                      <CreditCard className="w-6 h-6 mr-3" />
+                      {isTrial ? "Claim Trial Credit" : `Launch ${zipCount} Zips`}
+                    </button>
+                  </div>
+                  
+                  <div className="flex flex-wrap justify-center items-center text-[8px] md:text-[9px] font-black text-gray-400 uppercase tracking-[0.2em] md:tracking-[0.4em] gap-4 md:gap-10 opacity-70 mt-4">
+                    <span className="flex items-center"><ShieldCheck className="w-3.5 h-3.5 mr-2 text-brand-primary" /> Fail-Safe Policy</span>
+                    <span className="flex items-center"><Sparkles className="w-3.5 h-3.5 mr-2 text-brand-primary" /> AI Mastering</span>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
