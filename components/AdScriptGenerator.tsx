@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { generateTvCommercial, searchBusinesses, BusinessCandidate } from '../services/geminiService';
 import { generateQrCode } from '../services/qrService';
-import { Wand2, Loader2, Play, Square, MapPin, Check, ShieldCheck, Phone, Tv, CreditCard, Minus, Plus, RefreshCw, X, Sparkles } from 'lucide-react';
+import { createTrialSession, createPaidSession } from '../services/stripeService';
+import { Wand2, Loader2, Play, Square, MapPin, Check, ShieldCheck, Phone, Tv, CreditCard, Minus, Plus, RefreshCw, X, Sparkles, Hash } from 'lucide-react';
 
 const BACKGROUND_MUSIC_URL = 'https://cdn.pixabay.com/audio/2024/01/16/audio_e2b992254f.mp3';
 
@@ -14,6 +15,7 @@ const AdScriptGenerator: React.FC = () => {
   const [offer, setOffer] = useState('');
   const [view, setView] = useState<'form' | 'simulator'>('form');
   const [isLoading, setIsLoading] = useState(false);
+  const [isRedirecting, setIsRedirecting] = useState(false);
   const [loadingStep, setInLoadingStep] = useState('');
   
   const [visualHeadline, setVisualHeadline] = useState('');
@@ -23,6 +25,7 @@ const AdScriptGenerator: React.FC = () => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [zipCount, setZipCount] = useState(1);
   const [isTrial, setIsTrial] = useState(true);
+  const [zipCodeEntry, setZipCodeEntry] = useState('');
 
   const audioContextRef = useRef<AudioContext | null>(null);
   const voiceNodeRef = useRef<AudioBufferSourceNode | null>(null);
@@ -88,6 +91,48 @@ const AdScriptGenerator: React.FC = () => {
       alert(`Error: ${error.message || "Failed to generate preview. Try again."}`);
     } finally { 
       setIsLoading(false); 
+    }
+  };
+
+  const handleCheckout = async () => {
+    if (!selectedBusiness || !zipCodeEntry) {
+      alert("Please enter at least one target Zip Code.");
+      return;
+    }
+
+    setIsRedirecting(true);
+    const zips = zipCodeEntry.split(',').map(z => z.trim()).filter(z => z);
+
+    try {
+      if (isTrial) {
+        // ENFORCED RULE: Trial flow must NEVER allow quantity > 1 (locked at server level, primaryZip is zips[0])
+        await createTrialSession({
+          businessName: selectedBusiness.name,
+          businessType: 'Local Business',
+          city: cityQuery || 'Local Neighborhood',
+          primaryZip: zips[0] || '',
+          qrDestination: selectedBusiness.mapsUri
+        });
+      } else {
+        // ENFORCED RULE: Paid flow requires zipCount >= 2
+        if (zipCount < 2) {
+          alert("Multi-Zip Coverage requires at least 2 zip codes. Switch to Trial Pack for single zip coverage.");
+          setIsRedirecting(false);
+          return;
+        }
+        await createPaidSession({
+          businessName: selectedBusiness.name,
+          businessType: 'Local Business',
+          city: cityQuery || 'Local Neighborhood',
+          zipCodes: zips,
+          zipCount: zipCount,
+          qrDestination: selectedBusiness.mapsUri
+        });
+      }
+    } catch (e) {
+      console.error("Checkout failed", e);
+    } finally {
+      setIsRedirecting(false);
     }
   };
 
@@ -244,11 +289,15 @@ const AdScriptGenerator: React.FC = () => {
 
           {/* TV Simulator Column */}
           <div className="lg:col-span-7 order-1 lg:order-2 relative">
-            {isLoading && (
+            {(isLoading || isRedirecting) && (
               <div className="absolute inset-0 z-[60] bg-white/95 rounded-[2rem] md:rounded-[2.5rem] flex flex-col items-center justify-center text-center p-6 md:p-12">
                 <Loader2 className="w-12 h-12 text-brand-primary animate-spin mb-6" />
-                <h3 className="text-xl md:text-2xl font-black text-brand-dark uppercase tracking-tighter mb-2">{loadingStep}</h3>
-                <p className="text-gray-400 text-xs md:text-sm max-w-xs">Connecting to local broadcast servers. Generating neighborhood visual assets.</p>
+                <h3 className="text-xl md:text-2xl font-black text-brand-dark uppercase tracking-tighter mb-2">
+                  {isRedirecting ? "Securing Inventory..." : loadingStep}
+                </h3>
+                <p className="text-gray-400 text-xs md:text-sm max-w-xs">
+                  {isRedirecting ? "Connecting to neighborhood broadcast nodes..." : "Connecting to local broadcast servers. Generating neighborhood visual assets."}
+                </p>
               </div>
             )}
 
@@ -279,7 +328,6 @@ const AdScriptGenerator: React.FC = () => {
                       <div className="absolute inset-0 crt-scanlines opacity-40"></div>
                     </div>
 
-                    {/* OVERLAYS - REFINED FOR TRANSPARENCY & SPACING */}
                     <div className="absolute inset-0 p-[5%] md:p-[6%] flex flex-col justify-between z-[20] pointer-events-none">
                       {/* Top Bar Tags */}
                       <div className="flex justify-between items-start w-full mb-2 md:mb-12">
@@ -292,16 +340,13 @@ const AdScriptGenerator: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* Center Content */}
                       <div className="flex-1 flex flex-col md:flex-row items-start md:items-center justify-center md:justify-between w-full py-4 relative">
-                        {/* Headline Box */}
                         <div className="bg-brand-primary/10 backdrop-blur-md text-white px-4 md:px-8 py-4 md:py-6 rounded-lg md:rounded-2xl shadow-[0_15px_60px_rgba(0,0,0,0.3)] border md:border-2 border-white/10 max-w-[85%] md:max-w-[70%] text-left">
                           <h1 className="text-sm md:text-3xl lg:text-4xl font-black uppercase tracking-tight leading-tight m-0 drop-shadow-[0_2px_8px_rgba(0,0,0,1)]">
                             {visualHeadline}
                           </h1>
                         </div>
 
-                        {/* QR Code */}
                         <div className="flex flex-col items-center absolute top-[-5%] sm:top-[0%] right-[0%] md:right-[2%]">
                           <div className="bg-white/40 backdrop-blur-sm p-1 md:p-1.5 rounded-lg md:rounded-2xl shadow-2xl ring-1 md:ring-2 ring-brand-primary/10 transition-transform duration-300 hover:scale-105">
                             {qrCodeUrl && <img src={qrCodeUrl} className="w-10 h-10 sm:w-16 sm:h-16 md:w-24 md:h-24 lg:w-28 lg:h-28" alt="Scan Map" />}
@@ -310,7 +355,6 @@ const AdScriptGenerator: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* Bottom Info Bar - ALIGNED HIGHER UP FOR VISIBILITY */}
                       <div className="flex justify-start items-end w-full mt-2 md:mt-4 mb-4 md:mb-12">
                         <div className="bg-brand-dark/15 backdrop-blur-xl px-4 md:px-6 py-3 md:py-4 rounded-xl md:rounded-2xl border border-white/5 shadow-2xl flex items-center w-full md:w-auto md:max-w-full">
                           <div className="bg-brand-primary/50 backdrop-blur-sm p-2 md:p-3 rounded-lg md:rounded-xl mr-3 md:mr-5 shadow-xl shrink-0">
@@ -326,7 +370,6 @@ const AdScriptGenerator: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Media Controls Layer */}
                     <div className="absolute bottom-0 w-full p-3 bg-black/40 backdrop-blur-md border-t border-white/10 flex items-center justify-between opacity-0 group-hover:opacity-100 transition-opacity z-[30]">
                       <button onClick={isPlaying ? stopAudio : () => playAudio(audioData)} className="p-2 md:p-3 bg-brand-primary rounded-full text-brand-dark shadow-xl hover:scale-110 active:scale-95 transition-all">
                         {isPlaying ? <Square className="w-3 h-3 md:w-4 md:h-4 fill-current" /> : <Play className="w-3 h-3 md:w-4 md:h-4 fill-current ml-0.5" />}
@@ -338,8 +381,22 @@ const AdScriptGenerator: React.FC = () => {
                   </div>
                 </div>
 
-                {/* PACKAGE SELECTION BLOCK */}
+                {/* TARGET ZIP COLLECTION */}
                 <div className="bg-white p-6 md:p-10 rounded-[2.5rem] shadow-2xl border border-gray-100 space-y-8 relative">
+                  <div className="space-y-4">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 flex items-center">
+                      <Hash className="w-3 h-3 mr-1.5" /> 
+                      Target Zip Codes
+                    </label>
+                    <input 
+                      type="text" 
+                      value={zipCodeEntry}
+                      onChange={(e) => setZipCodeEntry(e.target.value)}
+                      placeholder="e.g. 90210, 90211"
+                      className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-xl focus:ring-2 focus:ring-brand-primary outline-none font-black text-sm uppercase tracking-widest placeholder:normal-case placeholder:font-medium"
+                    />
+                  </div>
+
                   <div className="flex flex-col md:flex-row justify-between items-center gap-6 border-b pb-8">
                     <div className="text-center md:text-left">
                       <div className="inline-flex items-center space-x-1 text-emerald-600 font-black text-[9px] uppercase tracking-widest mb-1">
@@ -349,38 +406,64 @@ const AdScriptGenerator: React.FC = () => {
                       <h3 className="text-2xl md:text-3xl font-black text-brand-dark uppercase tracking-tight leading-none">Choose Your Reach</h3>
                     </div>
                     <div className="flex items-center space-x-3 bg-gray-50 p-2 md:p-3 rounded-2xl border">
-                      <button onClick={() => zipCount > 1 && setZipCount(zipCount - 1)} className="p-3 hover:bg-white rounded-xl shadow-sm transition-all"><Minus className="w-4 h-4 text-gray-400" /></button>
+                      <button 
+                        onClick={() => {
+                          if (zipCount > 1) {
+                            setZipCount(zipCount - 1);
+                            if (zipCount - 1 === 1) setIsTrial(true);
+                          }
+                        }} 
+                        className="p-3 hover:bg-white rounded-xl shadow-sm transition-all"
+                      >
+                        <Minus className="w-4 h-4 text-gray-400" />
+                      </button>
                       <div className="px-4 md:px-6 text-center min-w-[70px]">
                         <span className="text-3xl md:text-4xl font-black text-brand-dark leading-none">{zipCount}</span>
                         <span className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mt-1">Zips</span>
                       </div>
-                      <button onClick={() => { setZipCount(zipCount + 1); setIsTrial(false); }} className="p-3 hover:bg-white rounded-xl shadow-sm transition-all"><Plus className="w-4 h-4 text-brand-primary" /></button>
+                      <button 
+                        onClick={() => { 
+                          setZipCount(zipCount + 1); 
+                          setIsTrial(false); 
+                        }} 
+                        className="p-3 hover:bg-white rounded-xl shadow-sm transition-all"
+                      >
+                        <Plus className="w-4 h-4 text-brand-primary" />
+                      </button>
                     </div>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* BUTTON A: TRIAL PACK */}
                     <div 
                       onClick={() => { setIsTrial(true); setZipCount(1); }}
-                      className={`p-6 rounded-2xl border-2 cursor-pointer transition-all relative ${isTrial ? 'border-brand-primary bg-brand-primary/5 ring-4 md:ring-8 ring-brand-primary/5' : 'border-gray-100 bg-gray-50'}`}
+                      className={`p-6 rounded-2xl border-2 cursor-pointer transition-all relative ${isTrial ? 'border-brand-primary bg-brand-primary/5 ring-4 md:ring-8 ring-brand-primary/5' : 'border-gray-100 bg-gray-50 opacity-60'}`}
                     >
                       <div className="flex justify-between items-start mb-3">
                         <span className="text-[9px] font-black uppercase text-brand-primary tracking-widest bg-brand-primary/10 px-2 py-0.5 rounded">Trial Pack</span>
                         {isTrial && <Check className="w-4 h-4 text-brand-primary" />}
                       </div>
                       <div className="text-3xl md:text-4xl font-black text-brand-dark mb-1">$0 <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">30-Day Trial</span></div>
-                      <p className="text-[10px] text-gray-500 font-bold uppercase leading-relaxed">Risk-free trial. Reserve neighborhood inventory today. $0 charge until day 31.</p>
+                      <p className="text-[10px] text-gray-500 font-bold uppercase leading-relaxed">Claim 1-Zip TV Visibility Credit.</p>
+                      <p className="mt-3 text-[9px] font-black text-brand-primary uppercase tracking-[0.2em]">
+                        $0 today · Card required · Cancel before day 30
+                      </p>
                     </div>
                     
+                    {/* BUTTON B: DOMINATOR PACK */}
                     <div 
-                      onClick={() => setIsTrial(false)}
-                      className={`p-6 rounded-2xl border-2 cursor-pointer transition-all relative ${!isTrial ? 'border-brand-primary bg-brand-primary/5 ring-4 md:ring-8 ring-brand-primary/5' : 'border-gray-100 bg-gray-50'}`}
+                      onClick={() => { setIsTrial(false); if(zipCount < 2) setZipCount(2); }}
+                      className={`p-6 rounded-2xl border-2 cursor-pointer transition-all relative ${!isTrial ? 'border-brand-primary bg-brand-primary/5 ring-4 md:ring-8 ring-brand-primary/5' : 'border-gray-100 bg-gray-50 opacity-60'}`}
                     >
                       <div className="flex justify-between items-start mb-3">
                         <span className="text-[9px] font-black uppercase text-gray-400 tracking-widest">Dominator Pack</span>
                         {!isTrial && <Check className="w-4 h-4 text-brand-primary" />}
                       </div>
                       <div className="text-3xl md:text-4xl font-black text-brand-dark mb-1">${99 * zipCount} <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">/ Mo</span></div>
-                      <p className="text-[10px] text-gray-500 font-bold uppercase leading-relaxed">1,000 spots per zip every 30 days. Priority neighborhood placement & support.</p>
+                      <p className="text-[10px] text-gray-500 font-bold uppercase leading-relaxed">Launch Multi-Zip Coverage (Paid Now).</p>
+                      <p className="mt-3 text-[9px] font-black text-gray-400 uppercase tracking-[0.2em]">
+                        Billed today · $99/zip/month · Cancel anytime
+                      </p>
                     </div>
                   </div>
 
@@ -388,10 +471,14 @@ const AdScriptGenerator: React.FC = () => {
                     <button onClick={() => setView('form')} className="flex-1 py-4 md:py-5 rounded-xl border-2 border-gray-100 font-black text-gray-400 hover:text-brand-dark transition-all flex items-center justify-center text-sm uppercase">
                       <RefreshCw className="w-4 h-4 mr-3" /> Restart
                     </button>
-                    <button className="flex-[2] py-4 md:py-5 bg-brand-primary text-brand-dark font-black text-xl md:text-2xl rounded-xl shadow-2xl hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center group overflow-hidden relative uppercase">
+                    <button 
+                      onClick={handleCheckout}
+                      disabled={isRedirecting || !zipCodeEntry}
+                      className="flex-[2] py-4 md:py-5 bg-brand-primary text-brand-dark font-black text-xl md:text-2xl rounded-xl shadow-2xl hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center group overflow-hidden relative uppercase disabled:opacity-50"
+                    >
                       <div className="absolute inset-0 bg-white/20 -translate-x-full group-hover:translate-x-full transition-transform duration-700"></div>
                       <CreditCard className="w-6 h-6 mr-3" />
-                      {isTrial ? "Claim Trial Credit" : `Launch ${zipCount} Zips`}
+                      {isTrial ? "Claim Trial Credit ($0)" : `Launch ${zipCount} Zips`}
                     </button>
                   </div>
                   
