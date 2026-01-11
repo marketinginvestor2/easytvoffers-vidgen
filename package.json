@@ -1,7 +1,7 @@
 {
   "name": "easy-tv-offers",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,18 +9,18 @@
     "start": "node server.js"
   },
   "dependencies": {
-    "@google/generative-ai": "^0.32.0",
+    "@google/generative-ai": "0.21.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "lucide-react": "^0.559.0",
-    "react": "^19.2.1",
-    "react-dom": "^19.2.1",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
     "stripe": "^16.0.0"
   },
   "devDependencies": {
-    "@types/react": "^19.2.1",
-    "@types/react-dom": "^19.2.1",
+    "@types/react": "^18.2.48",
+    "@types/react-dom": "^18.2.18",
     "@vitejs/plugin-react": "^4.2.1",
     "typescript": "^5.2.2",
     "vite": "^5.1.4"
