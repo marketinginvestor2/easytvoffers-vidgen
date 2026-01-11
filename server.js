@@ -1,3 +1,5 @@
+import searchBusinesses from "./api/search-businesses.js";
+import generateTvCommercial from "./api/generate-tv-commercial.js";
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
@@ -27,6 +29,9 @@ const stripe = new Stripe(STRIPE_SECRET_KEY, { apiVersion: "2024-06-20" });
 app.get("/api/health", (req, res) => {
   res.status(200).json({ ok: true, service: "easy-tv-offers", ts: Date.now() });
 });
+// ----- Gemini AI Routes -----
+app.post("/api/search-businesses", searchBusinesses);
+app.post("/api/generate-tv-commercial", generateTvCommercial);
 
 // TRIAL checkout (qty defaults to 1)
 app.post("/api/checkout-trial", async (req, res) => {
@@ -146,3 +151,4 @@ app.get("*", (req, res) => {
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
