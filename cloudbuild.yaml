@@ -1,0 +1,19 @@
+steps:
+  - name: node:18
+    entrypoint: npm
+    args: ["install"]
+
+  - name: node:18
+    entrypoint: npm
+    args: ["run", "build"]
+
+  - name: gcr.io/cloud-builders/gsutil
+    args:
+      - "-m"
+      - "rsync"
+      - "-r"
+      - "dist"
+      - "gs://$PROJECT_ID-web"
+
+options:
+  logging: CLOUD_LOGGING_ONLY
