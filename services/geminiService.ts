@@ -1,5 +1,6 @@
 // services/geminiService.ts
-// Frontend-safe service: calls your backend API (DO NOT import @google/genai here)
+// Frontend-safe client wrapper (NO @google/genai here).
+// This file calls your backend endpoints instead of importing Gemini SDK in the browser.
 
 export interface BusinessCandidate {
   name: string;
@@ -15,49 +16,41 @@ export interface AdResult {
   imageBase64: string | null;
 }
 
-/**
- * If you want to point to a different backend URL, set:
- * VITE_API_BASE_URL="https://your-backend-domain.com"
- * Otherwise it will use same-origin (recommended).
- */
-const API_BASE =
-  (import.meta as any).env?.VITE_API_BASE_URL?.toString()?.trim() || "";
+type SearchBusinessesResponse = BusinessCandidate[];
+type GenerateTvCommercialResponse = AdResult;
 
-/**
- * Generic JSON POST helper
- */
-const postJson = async <T>(path: string, body: any): Promise<T> => {
-  const res = await fetch(`${API_BASE}${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body ?? {}),
-  });
+const API_BASE = ""; 
+// If your backend is same origin, leave as "".
+// If different domain, set like: "https://your-api-domain.com"
 
+const jsonHeaders = {
+  "Content-Type": "application/json",
+};
+
+async function handleResponse<T>(res: Response): Promise<T> {
   const text = await res.text();
   let data: any = null;
 
   try {
     data = text ? JSON.parse(text) : null;
   } catch {
-    // If backend accidentally returns non-JSON, surface it clearly
-    throw new Error(
-      `Backend returned non-JSON response (${res.status}): ${text?.slice(0, 500)}`
-    );
+    // If backend returned non-JSON, still show it for debugging
+    throw new Error(`Non-JSON response (${res.status}): ${text}`);
   }
 
   if (!res.ok) {
     const msg =
       data?.error ||
       data?.message ||
-      `Request failed (${res.status}): ${JSON.stringify(data)}`;
+      `Request failed (${res.status})`;
     throw new Error(msg);
   }
 
   return data as T;
-};
+}
 
 /**
- * Search businesses (backend uses Gemini + Maps tool)
+ * Search businesses (backend does the Gemini + Google Maps tool call)
  */
 export const searchBusinesses = async (
   query: string,
@@ -65,31 +58,28 @@ export const searchBusinesses = async (
 ): Promise<BusinessCandidate[]> => {
   if (!query || query.trim().length < 3) return [];
 
-  // Your backend endpoint (you will add this)
-  // Expected response: BusinessCandidate[]
-  return postJson<BusinessCandidate[]>("/api/search-businesses", {
-    query,
-    city,
+  const res = await fetch(`${API_BASE}/api/search-businesses`, {
+    method: "POST",
+    headers: jsonHeaders,
+    body: JSON.stringify({ query, city }),
   });
+
+  return handleResponse<SearchBusinessesResponse>(res);
 };
 
 /**
- * Generate TV commercial package (backend uses Gemini text + image + TTS)
+ * Generate the full TV commercial package (backend does Gemini text + image + TTS)
  */
 export const generateTvCommercial = async (
   business: BusinessCandidate,
   offer: string = "",
   city: string = ""
 ): Promise<AdResult> => {
-  if (!business?.name) {
-    throw new Error("Business name is required.");
-  }
-
-  // Your backend endpoint (you will add this)
-  // Expected response: AdResult
-  return postJson<AdResult>("/api/generate-tv-commercial", {
-    business,
-    offer,
-    city,
+  const res = await fetch(`${API_BASE}/api/generate-tv-commercial`, {
+    method: "POST",
+    headers: jsonHeaders,
+    body: JSON.stringify({ business, offer, city }),
   });
+
+  return handleResponse<GenerateTvCommercialResponse>(res);
 };
