@@ -1,5 +1,3 @@
-import searchBusinesses from "./api/search-businesses.js";
-import generateTvCommercial from "./api/generate-tv-commercial.js";
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
@@ -8,6 +6,8 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 dotenv.config();
+import searchBusinesses from "./api/search-businesses.js";
+import generateTvCommercial from "./api/generate-tv-commercial.js";
 
 const app = express();
 app.use(cors());
@@ -151,4 +151,5 @@ app.get("*", (req, res) => {
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
+
 
