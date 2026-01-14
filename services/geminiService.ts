@@ -21,7 +21,6 @@ type GenerateTvCommercialResponse = AdResult;
 
 // ✅ IMPORTANT: This must be your Cloud Run service URL (NOT the storage bucket URL)
 const API_BASE = "https://easytvoffers-vidgen-api-381799773272.us-central1.run.app";
-
 const jsonHeaders = {
   "Content-Type": "application/json",
 };
