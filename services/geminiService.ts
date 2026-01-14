@@ -19,9 +19,13 @@ export interface AdResult {
 type SearchBusinessesResponse = BusinessCandidate[];
 type GenerateTvCommercialResponse = AdResult;
 
-const API_BASE = ""; 
-// If your backend is same origin, leave as "".
-// If different domain, set like: "https://your-api-domain.com"
+/**
+ * API base URL behavior:
+ * - If VITE_API_BASE is set (ex: https://easytvoffers-vidgen-api-xxxx.run.app) => use it
+ * - Else => same-origin (""), which works when frontend+backend are served by the same Cloud Run service
+ */
+const API_BASE =
+  (import.meta as any)?.env?.VITE_API_BASE?.toString()?.trim() || "";
 
 const jsonHeaders = {
   "Content-Type": "application/json",
@@ -34,15 +38,11 @@ async function handleResponse<T>(res: Response): Promise<T> {
   try {
     data = text ? JSON.parse(text) : null;
   } catch {
-    // If backend returned non-JSON, still show it for debugging
     throw new Error(`Non-JSON response (${res.status}): ${text}`);
   }
 
   if (!res.ok) {
-    const msg =
-      data?.error ||
-      data?.message ||
-      `Request failed (${res.status})`;
+    const msg = data?.error || data?.message || `Request failed (${res.status})`;
     throw new Error(msg);
   }
 
