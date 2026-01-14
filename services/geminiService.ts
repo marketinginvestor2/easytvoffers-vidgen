@@ -19,13 +19,8 @@ export interface AdResult {
 type SearchBusinessesResponse = BusinessCandidate[];
 type GenerateTvCommercialResponse = AdResult;
 
-/**
- * API base URL behavior:
- * - If VITE_API_BASE is set (ex: https://easytvoffers-vidgen-api-xxxx.run.app) => use it
- * - Else => same-origin (""), which works when frontend+backend are served by the same Cloud Run service
- */
-const API_BASE =
-  (import.meta as any)?.env?.VITE_API_BASE?.toString()?.trim() || "";
+// ✅ IMPORTANT: This must be your Cloud Run service URL (NOT the storage bucket URL)
+const API_BASE = "https://easytvoffers-vidgen-api-381799773272.us-central1.run.app";
 
 const jsonHeaders = {
   "Content-Type": "application/json",
