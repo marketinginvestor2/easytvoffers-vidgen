@@ -2,11 +2,9 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export default async function searchBusinesses(req, res) {
-  // Always return JSON
   res.setHeader("Content-Type", "application/json");
 
   try {
-    // 1) Validate API key
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       return res.status(500).json({
@@ -15,7 +13,6 @@ export default async function searchBusinesses(req, res) {
       });
     }
 
-    // 2) Validate request body
     const { query, city } = req.body || {};
     if (!query || !city) {
       return res.status(400).json({
@@ -24,11 +21,11 @@ export default async function searchBusinesses(req, res) {
       });
     }
 
-    // 3) Call Gemini
     const genAI = new GoogleGenerativeAI(apiKey);
 
-    // Try a very safe, stable model name
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+    // ✅ Use a v1beta-supported model name
+    // This is the most reliable default for generateContent right now.
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
     const prompt = `
 Return ONLY a valid JSON array (no markdown, no code fences).
@@ -40,7 +37,7 @@ City: ${city}
 Each item MUST include:
 - name (string)
 - address (string)
-- mapsUri (string URL, can be "https://maps.google.com/?q=" + encodeURIComponent(name + " " + address))
+- mapsUri (string URL; use "https://maps.google.com/?q=" + encodeURIComponent(name + " " + address))
 - phoneNumber (string optional)
 
 Return ONLY JSON array.
@@ -49,7 +46,6 @@ Return ONLY JSON array.
     const result = await model.generateContent(prompt);
     const text = result?.response?.text?.() || "";
 
-    // 4) Parse JSON reliably (strip possible ```json fences)
     const cleaned = text
       .replace(/```json/gi, "")
       .replace(/```/g, "")
@@ -58,7 +54,7 @@ Return ONLY JSON array.
     let parsed;
     try {
       parsed = JSON.parse(cleaned);
-    } catch (parseErr) {
+    } catch {
       return res.status(500).json({
         error: "Gemini returned non-JSON",
         raw: text.slice(0, 2000),
@@ -74,16 +70,10 @@ Return ONLY JSON array.
 
     return res.status(200).json(parsed);
   } catch (err) {
-    // ✅ THIS is the key change: show the real error details
-    const msg = err?.message || String(err);
-    const status = err?.status || err?.code || 500;
-
     console.error("search-businesses ERROR:", err);
-
     return res.status(500).json({
       error: "Search failed (details below)",
-      message: msg,
-      // This helps when Google returns nested objects
+      message: err?.message || String(err),
       details: err?.response?.data || err?.response || null,
     });
   }
